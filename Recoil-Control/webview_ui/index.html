@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recoil Control</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.0.0/css/flag-icons.min.css"/>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <nav class="sidebar">
+            <div class="sidebar-title">
+                <span class="sidebar-label">Recoil Control</span>
+            </div>
+            <div class="nav-group recoil-group">
+                <button id="nav-recoil-btn" class="nav-btn active">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="7"></circle>
+                            <line x1="12" y1="5" x2="12" y2="2"></line>
+                            <line x1="12" y1="22" x2="12" y2="19"></line>
+                            <line x1="19" y1="12" x2="22" y2="12"></line>
+                            <line x1="2" y1="12" x2="5" y2="12"></line>
+                            <line x1="12" y1="9" x2="12" y2="15"></line>
+                            <line x1="9" y1="12" x2="15" y2="12"></line>
+                        </svg>
+                    </span>
+                    <span class="nav-text" data-i18n="control">Control</span>
+                </button>
+                
+            </div>
+            <button id="nav-presets-btn" class="nav-btn">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="4" y1="6" x2="20" y2="6"></line>
+                        <circle cx="9" cy="6" r="2"></circle>
+                        <line x1="4" y1="12" x2="20" y2="12"></line>
+                        <circle cx="15" cy="12" r="2"></circle>
+                        <line x1="4" y1="18" x2="20" y2="18"></line>
+                        <circle cx="7" cy="18" r="2"></circle>
+                    </svg>
+                </span>
+                <span class="nav-text" data-i18n="presets">Presets</span>
+            </button>
+            <button id="nav-macros-btn" class="nav-btn">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 22V4l4 2 4-2 4 2 4-2v18l-4-2-4 2-4-2-4 2z"></path>
+                        <path d="M8 6v12"></path>
+                        <path d="M12 6v12"></path>
+                        <path d="M16 6v12"></path>
+                    </svg>
+                </span>
+                <span class="nav-text" data-i18n="misc">Misc</span>
+            </button>
+            <button id="nav-overlay-btn" class="nav-btn">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"></path>
+                        <path d="M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0 -16 0"></path>
+                        <path d="M3.22 3.22l1.78 1.78"></path>
+                        <path d="M19 19l1.78 1.78"></path>
+                        <path d="M3.22 20.78l1.78 -1.78"></path>
+                        <path d="M20.78 3.22l-1.78 1.78"></path>
+                    </svg>
+                </span>
+                <span class="nav-text" data-i18n="overlay">Overlay</span>
+            </button>
+            <button id="nav-ai-btn" class="nav-btn">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a4 4 0 0 1-4 4H8l-4 4V7a4 4 0 0 1 4-4h9a4 4 0 0 1 4 4z"></path>
+                    </svg>
+                </span>
+                <span class="nav-text">RecoilAI</span>
+            </button>
+            <button id="nav-settings-btn" class="nav-btn">
+                <span class="nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 3.6 15a1.65 1.65 0 0 0-1.51-1H2a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 3.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 3.6a1.65 1.65 0 0 0 1-1.51V2a2 2 0 1 1 4 0v.09c0 .63.37 1.2.95 1.46.32.15.68.17 1.01.05A1.65 1.65 0 0 0 16 3.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.45.45-.58 1.12-.33 1.68.12.33.1.69-.05 1.01A1.65 1.65 0 0 0 20.4 8c.63 0 1.2.37 1.46.95.15.32.17.68.05 1.01-.22.67.07 1.39.62 1.79.55.4.87 1.03.87 1.69s-.32 1.29-.87 1.69a1.65 1.65 0 0 0-.62 1.79z"></path>
+                    </svg>
+                </span>
+                <span class="nav-text" data-i18n="settings">Settings</span>
+            </button>
+            <div class="online-status-sidebar">Online: <span id="online-count">0</span></div>
+            <div class="sidebar-footer">
+                <span class="footer-title">
+                    <span class="footer-name">Recoil Control</span>
+                    <span class="footer-version">v3.0.0</span>
+                </span>
+            </div>
+        </nav>
+
+        <div class="container content">
+            <div class="top-actions" id="top-actions">
+                <div class="tab-switcher" id="weapon-tabs">
+                    <button id="weapon-tab-primary" class="tab-btn active" data-i18n="primaryWeapon">Primary Weapon</button>
+                    <button id="weapon-tab-secondary" class="tab-btn" data-i18n="secondaryWeapon">Secondary Weapon</button>
+                </div>
+                <button id="toggle-recoil-btn" class="btn btn-danger" data-i18n="disabled">DISABLED</button>
+            </div>
+
+            <main id="recoil-controls-section">
+
+            <div class="recoil-controls">
+                <div id="weapon-tab-panels" class="weapon-panels">
+                <div id="weapon-panels-inner" class="weapon-panels-inner">
+                <div id="primary-controls" class="weapon-panel">
+                    <section id="primary-vertical" class="axis-card vertical-card">
+                        <div class="slider-group">
+                            <label for="primary-recoil-y" data-i18n="verticalRecoil">Vertical Recoil (Y)</label>
+                            <div class="vslider">
+                                <input type="range" id="primary-recoil-y" class="vslider-input" min="0" max="2000" value="0">
+                                <span id="primary-recoil-y-value" class="vslider-value">0</span>
+                            </div>
+                        </div>
+                    </section>
+                    <section id="primary-horizontal" class="axis-card horizontal-card">
+                        <div class="slider-group">
+                            <label for="primary-recoil-x" data-i18n="horizontalRecoil">Horizontal Recoil (X)</label>
+                            <div class="hslider">
+                                <input type="range" id="primary-recoil-x" class="hslider-input" min="-5000" max="5000" value="0">
+                                <span id="primary-recoil-x-value" class="hslider-value">0.000</span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                <div id="secondary-controls" class="weapon-panel">
+                    <section id="secondary-vertical" class="axis-card vertical-card">
+                        <div class="slider-group">
+                            <label for="secondary-recoil-y" data-i18n="verticalRecoil">Vertical Recoil (Y)</label>
+                            <div class="vslider">
+                                <input type="range" id="secondary-recoil-y" class="vslider-input" min="0" max="2000" value="0">
+                                <span id="secondary-recoil-y-value" class="vslider-value">0.000</span>
+                            </div>
+                        </div>
+                    </section>
+                    <section id="secondary-horizontal" class="axis-card horizontal-card">
+                        <div class="slider-group">
+                            <label for="secondary-recoil-x" data-i18n="horizontalRecoil">Horizontal Recoil (X)</label>
+                            <div class="hslider">
+                                <input type="range" id="secondary-recoil-x" class="hslider-input" min="-5000" max="5000" value="0">
+                                <span id="secondary-recoil-x-value" class="hslider-value">0.000</span>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                </div>
+                </div>
+            </div>
+
+            
+            </main>
+
+            <main id="presets-section" style="display: none;">
+            <div class="settings-tabs">
+                <div class="tab-switcher four" id="presets-tabs">
+                    <button id="tab-attackers" class="tab-btn active" data-i18n="attackers">Attackers</button>
+                    <button id="tab-defenders" class="tab-btn" data-i18n="defenders">Defenders</button>
+                    <button id="tab-saved-presets" class="tab-btn" data-i18n="saved">Saved</button>
+                    <button id="tab-community" class="tab-btn" data-i18n="community">Community</button>
+                </div>
+            </div>
+
+            <div id="agent-grid-container" class="agent-grid-container">
+            </div>
+
+            <div id="community-presets-section" class="community-presets" style="display: none;">
+                <div class="community-toolbar">
+                    <button id="community-publish-btn" class="btn btn-primary" data-i18n="publish">Publish</button>
+                    <div class="community-toolbar-right">
+                        <input id="community-search" class="text-input" type="text" placeholder="Search presets..." data-i18n="searchPresets">
+                        <select id="community-agent-filter" class="text-input">
+                            <option value="" data-i18n="allAgents">All agents</option>
+                            <option value="attackers" data-i18n="attackers">Attackers</option>
+                            <option value="defenders" data-i18n="defenders">Defenders</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="community-grid" class="community-grid"></div>
+            </div>
+
+            <div id="preset-management-section" class="preset-management-section" style="display: none;">
+                <h2 data-i18n="managePresetsFor">Manage Presets for <span id="selected-agent-name"></span></h2>
+                <div class="save-preset-group">
+                    <input type="text" id="new-preset-name" placeholder="Enter new preset name..." data-i18n="enterNewPresetName">
+                    <button id="save-preset-btn" class="btn btn-primary" data-i18n="saveCurrentSettings">Save Current Settings</button>
+                </div>
+                <div class="load-delete-preset-group">
+                    <select id="existing-presets-dropdown">
+                        <option value="" data-i18n="selectAPreset">Select a preset</option>
+                    </select>
+                    <button id="load-preset-btn" class="btn btn-success" data-i18n="load">Load</button>
+                    <button id="delete-preset-btn" class="btn btn-danger" data-i18n="delete">Delete</button>
+                </div>
+            </div>
+            </main>
+
+            <main id="ai-chat-section" style="display: none;">
+                <div class="ai-chat-wrapper">
+                    <div class="chat-header">
+                        <h2>RecoilAI</h2>
+                        <div id="mpd-counter" class="mpd-counter" data-i18n-tooltip="messagesPerDay">
+                            MPD: <span id="mpd-count">0</span>/<span id="mpd-max">50</span>
+                        </div>
+                    </div>
+                    <div class="chat-container">
+                        <div class="chat-history" id="chat-history">
+                            <div class="welcome-message">
+                                <h3 data-i18n="welcomeToAIAssistant">Welcome to the RecoilAI!</h3>
+                                <p data-i18n="aiAssistantWelcomeBody">I can help you with any questions you have about the app. How can I help you today?</p>
+                            </div>
+                        </div>
+                        <div class="chat-input-area">
+                            <div class="input-with-dropdown-wrapper">
+                                <div id="custom-ai-model-select" class="custom-select">
+                                    <div class="select-selected">
+                                        <span>RecoilAI</span>
+                                        <svg class="select-arrow-svg" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </div>
+                                    <div class="select-items select-hide">
+                                        <div data-value="recoil-ai" class="has-tooltip">
+                                            RecoilAI
+                                            <div class="model-tooltip">
+                                                <h4 data-i18n="recoilAiModelTitle">RecoilAI Model</h4>
+                                                <p data-i18n="recoilAiModelDesc">Um modelo de IA rápido e direto, ideal para perguntas e respostas rápidas.</p>
+                                                <hr>
+                                                <p><strong data-i18n="limit">Limite:</strong> 50 <span data-i18n="messagesPerDayText">mensagens por dia</span>.</p>
+                                            </div>
+                                        </div>
+                                        <div data-value="thinking" class="has-tooltip">
+                                            Thinking
+                                            <div class="model-tooltip">
+                                                <h4 data-i18n="thinkingModelTitle">Thinking Model</h4>
+                                                <p data-i18n="thinkingModelDesc">Um modelo de IA mais inteligente que pensa sobre a sua pergunta. Ideal para tarefas complexas que exigem análise e respostas detalhadas.</p>
+                                                <hr>
+                                                <p><strong data-i18n="limit">Limite:</strong> 5 <span data-i18n="messagesPerDayText">mensagens por dia</span>.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="ai-model-select-value" value="recoil-ai">
+                                </div>
+                                <input type="text" id="chat-input" placeholder="Type your message here..." data-i18n="typeYourMessageHere">
+                            </div>
+                            <button id="send-chat-btn" class="btn btn-primary">
+                                <span class="send-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                    </svg>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <main id="macros-section" style="display: none;">
+            <div class="misc-section-container">
+                <h3 data-i18n="misc">Misc</h3>
+                <div class="misc-columns">
+                    <div class="misc-column">
+                        <div class="custom-checkbox">
+                            <input type="checkbox" id="macro-auto-click" disabled>
+                            <label for="macro-auto-click" data-i18n="enableAutoClick">Enable Auto Click</label>
+                            <span class="beta-notice">(This feature will only be available in version 3.1.0)</span>
+                        </div>
+                        <div class="custom-checkbox">
+                            <input type="checkbox" id="tbag-enabled">
+                            <label for="tbag-enabled" data-i18n="enableTBagMacro">Enable T-Bag Macro</label>
+                        </div>
+                        
+                        
+                    </div>
+                    
+                </div>
+            </div>
+            </main>
+
+                        <main id="overlay-section" style="display: none;">
+                <div class="settings-tabs">
+                    <div class="tab-switcher" id="overlay-tabs">
+                        <button id="overlay-tab-attackers" class="tab-btn active" data-i18n="attackers">Attackers</button>
+                        <button id="overlay-tab-defenders" class="tab-btn" data-i18n="defenders">Defenders</button>
+                    </div>
+                </div>
+                <div id="overlay-agent-grid" class="overlay-agent-grid">
+    </div>
+    <div id="agent-drop-zone" class="overlay-drop-zone">
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+        <div class="drop-square"></div>
+    </div>
+    <button id="toggle-overlay-btn" class="btn btn-primary" style="margin-top: 20px;" data-i18n="toggleOverlay">Toggle Overlay</button>
+            </main>
+
+            <main id="settings-section" style="display: none;">
+            <div class="settings-tabs">
+                <div class="tab-switcher three" id="settings-tabs">
+                    <button id="settings-tab-general" class="tab-btn active" data-i18n="general">General</button>
+                    <button id="settings-tab-languages" class="tab-btn" data-i18n="languages">Languages</button>
+                    <button id="settings-tab-hotkeys" class="tab-btn" data-i18n="hotkeys">Hotkeys</button>
+                </div>
+            </div>
+            <div class="misc-settings">
+                <h3 class="settings-title" data-i18n="general">General</h3>
+
+                <div class="settings-panels">
+                    <div id="settings-panels-inner" class="settings-panels-inner">
+                        <section id="settings-general" class="settings-panel">
+                            
+                            <div class="form-row">
+                                <label for="setting-dpi" data-i18n="mouseDPI">Mouse DPI</label>
+                                <input id="setting-dpi" type="number" class="text-input" placeholder="e.g. 800" min="50" max="32000">
+                            </div>
+                            <div class="form-row">
+                                <label for="setting-sens" data-i18n="inGameSensitivity">In-game Sensitivity</label>
+                                <input id="setting-sens" type="number" step="0.1" class="text-input" placeholder="e.g. 7">
+                            </div>
+                            <div class="settings-subtitle-container">
+                                <h4 class="settings-subtitle" data-i18n="account">Account</h4>
+                                <div id="discord-user-info" class="user-info"></div>
+                            </div>
+                            <div class="form-row account-row">
+                                <div class="account-left">
+                                    <button id="account-login-btn" class="btn btn-primary" data-i18n="loginWithDiscord">Login with Discord</button>
+                                </div>
+                                <div class="account-right"></div>
+                            </div>
+                            
+                        </section>
+                        <section id="settings-languages" class="settings-panel">
+                            <div class="language-grid">
+                                <div class="language-card" data-lang="nl">
+                                    <span class="fi fi-nl"></span>
+                                    <span data-i18n="dutch">Dutch</span>
+                                </div>
+                                <div class="language-card" data-lang="en">
+                                    <span class="fi fi-gb"></span>
+                                    <span data-i18n="english">English</span>
+                                </div>
+                                <div class="language-card" data-lang="fr">
+                                    <span class="fi fi-fr"></span>
+                                    <span data-i18n="francais">Français</span>
+                                </div>
+                                <div class="language-card" data-lang="de">
+                                    <span class="fi fi-de"></span>
+                                    <span data-i18n="german">German</span>
+                                </div>
+                                <div class="language-card" data-lang="pt">
+                                    <span class="fi fi-pt"></span>
+                                    <span data-i18n="portuguese">Portuguese</span>
+                                </div>
+                                <div class="language-card" data-lang="es">
+                                    <span class="fi fi-es"></span>
+                                    <span data-i18n="espanol">Español</span>
+                                </div>
+                            </div>
+                        </section>
+                        <section id="settings-hotkeys" class="settings-panel">
+                            <div class="hotkey-row"><label data-i18n="primaryWeapon">Primary Weapon</label><input id="hotkey-primary-1" class="hotkey-input" type="text" placeholder="Press a key" readonly></div>
+                            <div class="hotkey-row"><label data-i18n="secondaryWeapon">Secondary Weapon</label><input id="hotkey-secondary-1" class="hotkey-input" type="text" placeholder="Press a key" readonly></div>
+                            <div class="hotkey-row"><label data-i18n="toggleRecoil">Toggle Recoil</label><input id="hotkey-toggle" class="hotkey-input" type="text" placeholder="Press a key" readonly></div>
+                                                        <div class="hotkey-row"><label data-i18n="tBagMacro">T-Bag Macro</label><input id="hotkey-tbag" class="hotkey-input" type="text" placeholder="Press a key" readonly></div>
+                            <div class="hotkey-row"><label data-i18n="overlayToggle">Overlay Toggle</label><input id="hotkey-overlay-toggle" class="hotkey-input" type="text" placeholder="Press a key" readonly></div>
+                            <div class="hotkey-row"><label data-i18n="overlayStep">Overlay Step</label><input id="hotkey-overlay-step" class="hotkey-input" type="text" placeholder="Press a key" readonly></div>
+                            <div class="hotkey-row">
+                                <label for="tbag-key" data-i18n="tBagKey">T-Bag Key</label>
+                                <input id="tbag-key" class="hotkey-input" type="text" placeholder="Press a key" readonly>
+                            </div>
+                            <div class="hotkey-row">
+                                <div></div>
+                                <div class="hotkey-description" data-i18n="tBagKeyDescription">
+                                    A tecla que o macro pressiona (sua tecla de agachar no jogo).
+                                </div>
+                            </div>
+                        </section>
+                        
+                    </div>
+                </div>
+            </div>
+            </main>
+        </div>
+    </div>
+
+    <div id="pin-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <button type="button" id="pin-modal-close" class="modal-close">✕</button>
+            <h2 data-i18n="enterPIN">Enter PIN</h2>
+            <p data-i18n="pinDescription">Please enter the PIN you received from the Discord bot to authenticate your account.</p>
+            <div id="pin-error" class="modal-error" style="display:none"></div>
+            <input type="text" id="pin-input" placeholder="Your PIN" data-i18n="yourPIN">
+            <button id="submit-pin-btn" class="btn btn-neutral" data-i18n="submit">Submit</button>
+            <div class="modal-footer-link">
+                <a href="#" id="how-to-auth-link" data-i18n="howToAuthenticate">How to authenticate?</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="how-to-auth-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <button type="button" id="how-to-auth-close" class="modal-close">✕</button>
+            <h2 data-i18n="howToAuthenticate">How to Authenticate</h2>
+            <p data-i18n="howToAuthBody">Go to any channel on the <a href="https://discord.gg/T4BzwjHvTx" target="_blank">RecoilControl</a> Discord server and use the <code style='background-color: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 6px; display: inline-block; padding: 2px 6px; font-family: Consolas, Courier New, monospace; font-size: 0.9em; color: #e9e9e9;'>/pin</code> command. The bot will give you a PIN to authenticate.</p>
+        </div>
+    </div>
+
+    <div id="publish-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <button type="button" id="publish-close" class="modal-close">✕</button>
+            <h2 data-i18n="publishCommunityPreset">Publish Community Preset</h2>
+            <p data-i18n="publishPresetDescription">Select one of your saved presets and give it a community name.</p>
+            <div class="form-row">
+                <label for="publish-preset-select" data-i18n="savedPreset">Saved preset</label>
+                <select id="publish-preset-select"></select>, 
+            </div>
+            <div class="form-row">
+                <label for="publish-name-input" data-i18n="communityName">Community name</label>
+                <input type="text" id="publish-name-input" placeholder="Preset name to publish" data-i18n="presetNameToPublish">
+            </div>
+            <div id="publish-error" class="modal-error" style="display:none;"></div>
+            <div class="actions">
+                <button id="publish-confirm-btn" class="btn btn-success" data-i18n="publish">Publish</button>
+                <button id="publish-cancel-btn" class="btn btn-danger" data-i18n="cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="agent-preset-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <button type="button" id="agent-preset-close" class="modal-close">✕</button>
+            <h2 data-i18n="agentPreset">Agent Preset</h2>
+            <div class="tab-switcher" id="agent-preset-tabs">
+                <button id="agent-preset-tab-save" class="tab-btn active" data-i18n="save">Save</button>
+                <button id="agent-preset-tab-load" class="tab-btn" data-i18n="load">Load</button>
+            </div>
+            
+            <div id="agent-preset-panels">
+                <div id="agent-preset-panel-save">
+                    <div class="form-row">
+                        <label data-i18n="operator">Operator</label>
+                        <div id="agent-preset-operator-save" class="static-value">—</div>
+                    </div>
+                    <div class="form-row">
+                        <label for="agent-preset-name" data-i18n="presetName">Preset name</label>
+                        <input type="text" id="agent-preset-name" placeholder="Enter preset name" data-i18n="enterPresetName">
+                    </div>
+                    <div class="actions">
+                        <button id="agent-preset-save-btn" class="btn btn-neutral" data-i18n="save">Save</button>
+                    </div>
+                </div>
+
+                <div id="agent-preset-panel-load" style="display:none;">
+                    <div class="form-row">
+                        <label data-i18n="operator">Operator</label>
+                        <div id="agent-preset-operator-load" class="static-value">—</div>
+                    </div>
+                    <div class="form-row">
+                        <label for="agent-preset-existing" data-i18n="presets">Presets</label>
+                        <select id="agent-preset-existing"></select>
+                    </div>
+                    <div class="actions" style="gap:10px;">
+                        <button id="agent-preset-load-btn" class="btn btn-neutral" data-i18n="load">Load</button>
+                        <button id="agent-preset-delete-btn" class="btn btn-danger" data-i18n="delete">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="agent-preset-selector-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <button type="button" id="agent-preset-selector-close" class="modal-close">✕</button>
+            <h2><span data-i18n="selectPresetFor">Select Preset for</span> <span id="selected-agent-preset-agent-name"></span></h2>
+            <div class="form-row">
+                <label for="agent-preset-selector-dropdown" data-i18n="preset">Preset</label>
+                <select id="agent-preset-selector-dropdown"></select>
+            </div>
+            <div class="actions">
+                <button id="agent-preset-selector-load-btn" class="btn btn-neutral" data-i18n="load">Load</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rate-app-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <button type="button" id="rate-app-modal-close" class="modal-close">✕</button>
+            <h2 data-i18n="rateAppTitle">Rate Your Experience</h2>
+            <p data-i18n="rateAppDescription">How would you rate your experience with the app?</p>
+            <div class="rating-icons" id="rate-app-icons">
+            </div>
+            <div class="custom-checkbox rating-checkbox-container">
+                <input type="checkbox" id="rate-app-dont-show-again">
+                <label for="rate-app-dont-show-again" data-i18n="dontShowAgain">Don't show again</label>
+            </div>
+            <div class="actions">
+                <button id="rate-app-submit-btn" class="btn btn-neutral" data-i18n="submit" disabled>Submit</button>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+body {
+    background-color: #1A1A1A;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.agent-container {
+    display: grid;
+    grid-template-columns: repeat(14, 28px);
+    gap: 6px;
+    padding-right: 2px;
+}
+
+.drop-square {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    background-color: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.agent-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+}
+
+.drop-square.selected {
+    border-color: #007BFF;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
