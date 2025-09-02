@@ -5,9 +5,9 @@ import threading
 import os
 import json
 import sys
-import requests # Import requests
-import subprocess # Import subprocess for update
-import shutil # Import shutil for file operations
+import requests
+import subprocess
+import shutil
 import ctypes
 import base64
 from settings_manager import SettingsManager, CONFIG_DIR
@@ -18,8 +18,6 @@ try:
 except Exception:
     Image = None
 
-
-# Import additional libraries for overlay functionality
 try:
     import win32gui
     import win32con
@@ -29,33 +27,26 @@ except ImportError:
     win32con = None
     win32api = None
 
-# Controller support removed
-
 from recoil_controller import RecoilController
 from pynput import keyboard, mouse
 from pynput.mouse import Button
 
-# Define o diretório de configuração em %APPDATA%\Recoil Control
 settings_manager = SettingsManager()
 
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
-# Versão da aplicação (do main.py original)
 __version__ = "3.0.0"
 
-# NGROK_BASE_URL (from main.py)
 NGROK_BASE_URL = "https://api.recoilcontrol.app"
 
-# KEY_MAP do main.py original
 KEY_MAP = {
     0x04: "MIDDLE BUTTON", 0x05: "SIDE BUTTON 1", 0x06: "SIDE BUTTON 2",
     0x08: "BACKSPACE", 0x09: "TAB", 0x0D: "ENTER", 0x10: "SHIFT", 0x11: "CONTROL",
     0x12: "ALT", 0x14: "CAPSLOCK", 0x1B: "ESCAPE", 0x20: "SPACE", 0x25: "ARROWLEFT",
     0x26: "ARROWUP", 0x27: "ARROWRIGHT", 0x28: "ARROWDOWN", 0x2E: "DELETE",
-    # Add mappings for L/R variants to match JS e.key logic
-    0xA0: "SHIFT", 0xA1: "SHIFT",       # VK_LSHIFT, VK_RSHIFT
-    0xA2: "CONTROL", 0xA3: "CONTROL",   # VK_LCONTROL, VK_RCONTROL
-    0xA4: "ALT", 0xA5: "ALT",           # VK_LMENU, VK_RMENU
+    0xA0: "SHIFT", 0xA1: "SHIFT",
+    0xA2: "CONTROL", 0xA3: "CONTROL",
+    0xA4: "ALT", 0xA5: "ALT",
     **{i: chr(i) for i in range(ord('0'), ord('9') + 1)},
     **{i: chr(i) for i in range(ord('A'), ord('Z') + 1)},
     **{i + 0x6F: f"F{i}" for i in range(1, 13)},
@@ -63,7 +54,6 @@ KEY_MAP = {
     0xDB: "[", 0xDC: "\"", 0xDD: "]", 0xDE: "`",
 }
 
-# Invert KEY_MAP for faster lookup from pynput key objects
 INVERTED_KEY_MAP = {v: k for k, v in KEY_MAP.items()}
 
 def get_base_path():
@@ -72,7 +62,6 @@ def get_base_path():
     else:
         return os.path.dirname(os.path.abspath(__file__))
 
-# --- API Bridge between Python and JavaScript ---
 class Api:
     def __init__(self):
         self._window = None
@@ -85,7 +74,6 @@ class Api:
         self.current_overlay_square_index = -1
         self.overlay_agents = []
         self.online_count_poller = None
-        # Load settings on initialization
         self.load_settings()
         self.signal_online()
         self.start_online_count_poller()
@@ -94,12 +82,9 @@ class Api:
     def set_window(self, window):
         print("Setting window for API")
         self._window = window
-        # Passa a referência da janela para o controlador de recoil
         self.recoil_controller._window = window
         print("Window set for API")
-        # Controller bridge removed
-    
-    # Window control methods for custom titlebar
+
     def minimize(self):
         try:
             if self._window:
@@ -110,7 +95,6 @@ class Api:
     def toggle_maximize(self):
         try:
             if self._window:
-                # Try native maximize if available, else fallback to fullscreen toggle
                 if hasattr(self._window, 'maximize'):
                     self._window.maximize()
                 else:
@@ -126,11 +110,9 @@ class Api:
             print(f"Close error: {e}")
 
     def load_settings(self):
-        # Load persisted settings using SettingsManager and apply to runtime settings object
         loaded = settings_manager.read_settings_file()
         try:
             if loaded:
-                # Apply persisted values to recoil_controller.settings (set attributes even if not pre-defined)
                 for k, v in loaded.items():
                     try:
                         setattr(self.recoil_controller.settings, k, v)
@@ -140,24 +122,21 @@ class Api:
         except Exception as e:
             print(f"Error applying loaded settings: {e}")
 
-        # Ensure a unique identifier exists for online presence, regardless of login status.
         if not getattr(self.recoil_controller.settings, 'identificador', None):
             import uuid
             new_id = str(uuid.uuid4())
             print(f"Identifier not found. Generating new one: {new_id}")
             setattr(self.recoil_controller.settings, 'identificador', new_id)
-            # Save settings immediately to persist the new ID
+
             self.save_settings()
 
     def save_settings(self):
-        # Use SettingsManager.update_settings to persist only allowed keys
         try:
             if hasattr(self.recoil_controller.settings, 'to_dict'):
                 data = self.recoil_controller.settings.to_dict()
             else:
                 data = dict(getattr(self.recoil_controller.settings, '__dict__', {}))
 
-            # Only send allowed keys to the manager
             to_persist = {k: v for k, v in data.items() if k in settings_manager.allowed_keys}
             updated = settings_manager.update_settings(to_persist)
             print("Settings saved successfully via SettingsManager.")
@@ -203,20 +182,17 @@ class Api:
                 on_top=True,
                 width=500,
                 height=50,
-                transparent=True,  # Important for layered windows
+                transparent=True,
                 easy_drag=False
             )
 
             def on_loaded():
                 def apply_styles_and_position():
                     try:
-                        # Use FindWindowW to get the handle by title
                         hwnd = win32gui.FindWindow(None, 'Overlay')
                         if not hwnd:
-                            # print("Could not find overlay window handle for styling.")
-                            return False # Indicate failure to retry
-                        
-                        # Define constants
+                            return False
+
                         GWL_EXSTYLE = -20
                         WS_EX_TRANSPARENT = 0x00000020
                         WS_EX_LAYERED = 0x00080000
@@ -224,15 +200,12 @@ class Api:
                         WS_EX_TOOLWINDOW = 0x00000080
                         LWA_ALPHA = 0x00000002
 
-                        # Get current style and apply new styles
                         ex_style = win32gui.GetWindowLong(hwnd, GWL_EXSTYLE)
                         ex_style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
                         win32gui.SetWindowLong(hwnd, GWL_EXSTYLE, ex_style)
-                        
-                        # Set window as layered but fully opaque
+
                         win32gui.SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)
 
-                        # Reposition the window to the bottom right
                         rect = win32gui.GetWindowRect(hwnd)
                         width = rect[2] - rect[0]
                         height = rect[3] - rect[1]
@@ -241,21 +214,20 @@ class Api:
                         x = screen_width - width - 10
                         y = screen_height - height - 5
                         win32gui.MoveWindow(hwnd, x, y, width, height, True)
-                        
+
                         print("Applied click-through styles and repositioned overlay using new method.")
-                        return True # Indicate success
+                        return True
                     except Exception as e:
                         print(f"Error in apply_styles_and_position thread: {e}")
-                        return False # Indicate failure
+                        return False
 
-                # Use a loop with a delay to robustly apply styles
                 def robust_apply():
                     import time
-                    for _ in range(20): # Try for 1 second
+                    for _ in range(20):
                         if apply_styles_and_position():
                             break
                         time.sleep(0.05)
-                
+
                 threading.Thread(target=robust_apply).start()
 
             self.overlay_window.events.loaded += on_loaded
@@ -263,8 +235,6 @@ class Api:
             if self._window:
                 self._window.evaluate_js(f'updateOverlayButtonState(true)')
             return {"isActive": True}
-
-    
 
     def is_overlay_active(self):
         """Returns the current state of the overlay window."""
@@ -279,15 +249,12 @@ class Api:
     def apply_settings(self, settings_dict):
         """Applies a dictionary of settings and saves them."""
         try:
-            # Map UI keys to internal keys if needed
             resolved = dict(settings_dict)
-            # Normalize DPI/Sensitivity into the settings object even if the attributes don't pre-exist
             if 'setting_dpi' in resolved:
                 try:
                     dpi_val = int(resolved.get('setting_dpi'))
                 except Exception:
                     dpi_val = resolved.get('setting_dpi')
-                # store under multiple keys so other parts of the app can read them
                 try:
                     setattr(self.recoil_controller.settings, 'dpi', dpi_val)
                 except Exception:
@@ -300,7 +267,6 @@ class Api:
                     setattr(self.recoil_controller.settings, 'setting_dpi', dpi_val)
                 except Exception:
                     pass
-                # also ensure resolved contains a canonical key
                 resolved['dpi'] = dpi_val
 
             if 'setting_sens' in resolved:
@@ -322,15 +288,14 @@ class Api:
                     pass
                 resolved['sens'] = sens_val
 
-            # Handle overlay/zoom settings
             if 'overlay_zoom_level' in resolved:
                 try:
                     zoom_val = float(resolved.get('overlay_zoom_level'))
                     setattr(self.recoil_controller.settings, 'overlay_zoom_level', zoom_val)
-                    setattr(self.recoil_controller.settings, 'zoom_level', zoom_val) # for compatibility
+                    setattr(self.recoil_controller.settings, 'zoom_level', zoom_val) 
                 except (ValueError, TypeError):
                     pass
-            elif 'zoom_level' in resolved: # fallback for old key
+            elif 'zoom_level' in resolved: 
                  try:
                     zoom_val = float(resolved.get('zoom_level'))
                     setattr(self.recoil_controller.settings, 'overlay_zoom_level', zoom_val)
@@ -340,17 +305,15 @@ class Api:
 
             if 'overlay_enabled' in resolved:
                 setattr(self.recoil_controller.settings, 'overlay_enabled', resolved['overlay_enabled'])
-                setattr(self.recoil_controller.settings, 'zoom_hack_enabled', resolved['overlay_enabled']) # for compatibility
-            elif 'zoom_hack_enabled' in resolved: # fallback for old key
+                setattr(self.recoil_controller.settings, 'zoom_hack_enabled', resolved['overlay_enabled']) 
+            elif 'zoom_hack_enabled' in resolved: 
                 setattr(self.recoil_controller.settings, 'overlay_enabled', resolved['zoom_hack_enabled'])
                 setattr(self.recoil_controller.settings, 'zoom_hack_enabled', resolved['zoom_hack_enabled'])
-
 
             for key, value in resolved.items():
                 if hasattr(self.recoil_controller.settings, key):
                     setattr(self.recoil_controller.settings, key, value)
-            
-            # After applying, update the controller with the new values
+
             if self.recoil_controller.settings.active_weapon == "primary":
                 self.recoil_controller.set_recoil_y(self.recoil_controller.settings.primary_recoil_y)
                 self.recoil_controller.set_recoil_x(self.recoil_controller.settings.primary_recoil_x)
@@ -358,16 +321,13 @@ class Api:
                 self.recoil_controller.set_recoil_y(self.recoil_controller.settings.secondary_recoil_y)
                 self.recoil_controller.set_recoil_x(self.recoil_controller.settings.secondary_recoil_x)
 
-            
-
-            # Handle crosshair functionality
             if hasattr(self.recoil_controller.settings, 'crosshair_enabled'):
                 if self.recoil_controller.settings.crosshair_enabled:
                     self.recoil_controller.start_crosshair()
                 else:
                     self.recoil_controller.stop_crosshair()
 
-            self.save_settings() # Save settings after applying
+            self.save_settings() 
             print("Settings applied successfully.")
             return {"success": True}
         except Exception as e:
@@ -383,7 +343,7 @@ class Api:
             self.keyboard_listener = keyboard.Listener(on_press=self._on_key_press, on_release=self._on_key_release)
             self.keyboard_listener.start()
             print("Keyboard listener started.")
-        
+
         if not self.mouse_listener or not self.mouse_listener.is_alive():
             self.mouse_listener = mouse.Listener(on_click=self._on_mouse_click, on_scroll=self._on_scroll_event)
             self.mouse_listener.start()
@@ -394,26 +354,24 @@ class Api:
             self.keyboard_listener.stop()
             self.keyboard_listener.join()
             print("Keyboard listener stopped.")
-        
+
         if self.mouse_listener and self.mouse_listener.is_alive():
             self.mouse_listener.stop()
             self.mouse_listener.join()
             print("Mouse listener stopped.")
-        # Controller bridge removed
 
     def _get_hotkey_string(self, key):
         """Converts a pynput key object to a string representation used in settings."""
         try:
-            # For special keys like Key.f1, Key.shift
+
             if hasattr(key, 'vk'):
-                # Use win32api to get the key name if it's a virtual key code
-                # This handles cases where pynput's name might be different from our KEY_MAP
+
                 import win32api
                 vk_code = key.vk
                 if vk_code in KEY_MAP:
                     return KEY_MAP[vk_code]
                 else:
-                    # Fallback for other VK codes not in our map
+
                     return f"VK_{vk_code}"
             elif hasattr(key, 'char') and key.char is not None:
                 return str(key.char).upper()
@@ -434,7 +392,7 @@ class Api:
                 self.recoil_controller.stop_t_bag()
 
     def _on_mouse_click(self, x, y, button, pressed):
-        # This is handled by recoil_controller directly, but we can add UI updates here if needed
+
         pass
 
     def _on_scroll_event(self, x, y, dx, dy):
@@ -443,52 +401,46 @@ class Api:
             hotkey_string = "SCROLL_UP"
         elif dy < 0:
             hotkey_string = "SCROLL_DOWN"
-        
+
         if hotkey_string:
             self._process_hotkey(hotkey_string)
 
     def toggle_overlay_hotkey(self):
         """Handles the overlay toggle hotkey press."""
         self.recoil_controller.settings.overlay_enabled = not getattr(self.recoil_controller.settings, 'overlay_enabled', False)
-        self.save_settings() # Just save, don't re-apply everything
+        self.save_settings() 
         if self._window:
-            # We still need to tell the UI about the main toggle button state
+
             self._window.evaluate_js(f'updateOverlayButtonState({json.dumps(self.recoil_controller.settings.overlay_enabled)});')
-            # And update the settings view in case it's open
+
             self._window.evaluate_js(f'updateUIFromPython({json.dumps(self.get_settings())});')
 
     def update_overlay_agents(self, agents):
-        self.overlay_agents = agents  # Store the agents
+        self.overlay_agents = agents  
         if self.overlay_window:
             self.overlay_window.evaluate_js(f'window.update_agents({json.dumps(agents)})')
 
     def step_overlay_square_hotkey(self):
         """Handles the overlay step square hotkey press. Cycles through non-empty squares."""
-        
-        # 1. Find indices of squares with agents
+
         agent_indices = [i for i, agent in enumerate(self.overlay_agents) if agent and agent.get('name')]
 
-        # 2. If no agents, do nothing
         if not agent_indices:
             print("No agents in overlay to step through.")
             return
 
-        # 3. Find the next index
         try:
-            # Find where the current index is in our list of valid agent indices
+
             current_list_index = agent_indices.index(self.current_overlay_square_index)
-            # Move to the next index in the list, wrapping around
+
             next_list_index = (current_list_index + 1) % len(agent_indices)
         except ValueError:
-            # If the current index isn't in the list (e.g., it's -1 or an empty square was selected before),
-            # just start from the first agent in the list.
+
             next_list_index = 0
 
-        # 4. Get the new actual square index
         new_square_index = agent_indices[next_list_index]
         self.current_overlay_square_index = new_square_index
 
-        # 5. Highlight and load preset (the rest of the logic)
         if self.overlay_window:
             self.overlay_window.evaluate_js(f'window.highlight_square({self.current_overlay_square_index})')
 
@@ -507,24 +459,20 @@ class Api:
     def _process_hotkey(self, hotkey_string):
         print(f"Processing hotkey: {hotkey_string}")
 
-        # Toggle Recoil hotkey
         if hasattr(self.recoil_controller.settings, 'toggle_hotkey') and hotkey_string in self.recoil_controller.settings.toggle_hotkey:
             self.toggle_recoil()
             if self._window:
                 self._window.evaluate_js(f'updateToggleButtonState({json.dumps(self.is_recoil_active())});')
             return
 
-        # Overlay Toggle hotkey
         if hasattr(self.recoil_controller.settings, 'overlay_toggle_hotkey') and hotkey_string in self.recoil_controller.settings.overlay_toggle_hotkey:
             self.toggle_overlay_hotkey()
             return
 
-        # Overlay Step hotkey
         if hasattr(self.recoil_controller.settings, 'overlay_step_hotkey') and hotkey_string in self.recoil_controller.settings.overlay_step_hotkey:
             self.step_overlay_square_hotkey()
             return
 
-        # T-Bag hotkey (should work even if recoil is disabled)
         if hasattr(self.recoil_controller.settings, 't_bag_hotkey') and hotkey_string in self.recoil_controller.settings.t_bag_hotkey:
             if self.recoil_controller.settings.t_bag_enabled:
                 if not self.recoil_controller.t_bag_active:
@@ -533,7 +481,6 @@ class Api:
         if not self._recoil_active:
             return
 
-        # Primary Weapon hotkey
         if hasattr(self.recoil_controller.settings, 'primary_weapon_hotkey') and (hotkey_string in self.recoil_controller.settings.primary_weapon_hotkey or hotkey_string in self.recoil_controller.settings.primary_weapon_hotkey_2):
             self.recoil_controller.settings.active_weapon = "primary"
             self.recoil_controller.set_recoil_y(self.recoil_controller.settings.primary_recoil_y)
@@ -543,7 +490,6 @@ class Api:
                 self._window.evaluate_js(f'updateUIFromPython({json.dumps(self.get_settings())});')
             print(f"Primary weapon activated by hotkey: {hotkey_string}.")
 
-        # Secondary Weapon hotkey
         elif hasattr(self.recoil_controller.settings, 'secondary_weapon_hotkey') and (hotkey_string in self.recoil_controller.settings.secondary_weapon_hotkey or \
              hotkey_string in self.recoil_controller.settings.secondary_weapon_hotkey_2):
             self.recoil_controller.settings.active_weapon = "secondary"
@@ -554,9 +500,6 @@ class Api:
                 self._window.evaluate_js(f'updateUIFromPython({json.dumps(self.get_settings())});')
             print(f"Secondary weapon activated by hotkey: {hotkey_string}.")
 
-    # Controller bridge fully removed
-
-    # --- Agents & Presets API (exposed to JS) ---
     def get_agent_list(self, agent_type):
         """Returns a list of agents (name and image path) for the given type."""
         agent_names = []
@@ -588,21 +531,21 @@ class Api:
                 for agent_folder in os.listdir(presets_base_dir):
                     agent_path = os.path.join(presets_base_dir, agent_folder)
                     if os.path.isdir(agent_path):
-                        # Check if there is at least one .json file
+
                         has_presets = any(f.endswith('.json') for f in os.listdir(agent_path))
                         if has_presets:
-                            # Convert folder name (e.g., 'the_huntress') to display name ('The Huntress')
+
                             agent_name = agent_folder.replace('_', ' ').title()
                             agent_names.append(agent_name)
-            # For saved agents, we don't have a single type, so we'll have to find their images
-            agent_dir_type = None # Will check both attackers and defenders
+
+            agent_dir_type = None 
 
         agents_data = []
-        # Determine search paths for images
+
         search_paths = []
         if agent_dir_type:
             search_paths.append(os.path.join(get_base_path(), "webview_ui", "Agents", agent_dir_type))
-        else: # For 'saved', check both directories
+        else: 
             search_paths.append(os.path.join(get_base_path(), "webview_ui", "Agents", "attackers"))
             search_paths.append(os.path.join(get_base_path(), "webview_ui", "Agents", "defenders"))
 
@@ -620,7 +563,7 @@ class Api:
                     break
             if not found_image:
                 print(f"Warning: Agent image not found for saved agent: {name}")
-                agents_data.append({"name": name, "image": ""}) # Fallback
+                agents_data.append({"name": name, "image": ""}) 
         return agents_data
 
     def get_presets_for_agent(self, agent_name):
@@ -677,19 +620,15 @@ class Api:
         try:
             with open(preset_file_path, 'r') as f:
                 preset_settings = json.load(f)
-            
-            # Get the current full settings from the UI/app state
+
             current_full_settings = self.get_settings()
-            
-            # Update the current settings with the values from the preset
+
             current_full_settings.update(preset_settings)
 
-            # Now apply this complete, merged settings object
             self.apply_settings(current_full_settings)
-            
+
             print(f"Preset '{preset_name}' loaded successfully for {agent_name}.")
 
-            # Trigger UI update with the final, applied settings
             if self._window:
                 self._window.evaluate_js(f'updateUIFromPython({json.dumps(self.get_settings())})')
 
@@ -711,11 +650,10 @@ class Api:
             print(f"Error deleting preset: {e}")
             return {"success": False, "message": f"Error deleting preset: {e}"}
 
-    # --- Community Presets (HTTP to bot server) ---
     def get_community_presets(self, agent=None, query=None):
-        # Community presets should come only from the community database or remote API.
+
         try:
-            # Prefer bundled community database first (if present)
+
             db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database', 'community_presets.json')
             if os.path.exists(db_path) and os.path.getsize(db_path) > 0:
                 with open(db_path, 'r', encoding='utf-8') as f:
@@ -735,7 +673,7 @@ class Api:
                             'settings': p.get('settings', {})
                         }
                         presets.append(entry)
-                    # Apply optional filters
+
                     if agent:
                         presets = [p for p in presets if str(p.get('agent', '')).lower() == str(agent).lower()]
                     if query:
@@ -743,7 +681,6 @@ class Api:
                         presets = [p for p in presets if ql in str(p.get('name', '')).lower() or ql in str(p.get('author', '') or '').lower()]
                     return {"success": True, "presets": presets}
 
-            # Fallback to remote NGROK endpoint
             params = {}
             if agent:
                 params['agent'] = agent
@@ -766,7 +703,6 @@ class Api:
             if not isinstance(settings, dict):
                 return {"success": False, "message": "Invalid preset format."}
 
-            # Map known fields
             s = self.recoil_controller.settings
             s.primary_recoil_y = float(settings.get("primary_recoil_y", s.primary_recoil_y)) if settings.get("primary_recoil_y") is not None else s.primary_recoil_y
             s.primary_recoil_x = float(settings.get("primary_recoil_x", s.primary_recoil_x)) if settings.get("primary_recoil_x") is not None else s.primary_recoil_x
@@ -774,13 +710,11 @@ class Api:
             s.secondary_recoil_x = float(settings.get("secondary_recoil_x", s.secondary_recoil_x)) if settings.get("secondary_recoil_x") is not None else s.secondary_recoil_x
             s.secondary_weapon_enabled = bool(settings.get("secondary_weapon_enabled", s.secondary_weapon_enabled))
 
-            # Optional generic recoil_y/x support
             if "recoil_y" in settings and isinstance(settings["recoil_y"], (int, float)):
                 s.primary_recoil_y = float(settings["recoil_y"])
             if "recoil_x" in settings and isinstance(settings["recoil_x"], (int, float)):
                 s.primary_recoil_x = float(settings["recoil_x"])
 
-            # Save and return
             self.save_settings()
             return {"success": True, "settings": s.to_dict()}
         except Exception as e:
@@ -796,7 +730,6 @@ class Api:
             print(f"Error posting community preset: {e}")
             return {"success": False, "message": str(e)}
 
-    # --- AI and Discord Integration API Methods ---
     def send_ai_message(self, prompt, chat_history, discord_user_id, model):
         payload = {
             "prompt": prompt,
@@ -806,15 +739,15 @@ class Api:
             "model": model,
             "stream": True
         }
-    
+
         def stream_worker():
             try:
                 response = requests.post(f"{NGROK_BASE_URL}/ai", json=payload, stream=True)
                 response.raise_for_status()
-                # Use iter_content to get raw chunks
+
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
-                        # Base64 encode the raw chunk and send to JS
+
                         encoded_chunk = base64.b64encode(chunk).decode('utf-8')
                         if self._window:
                             self._window.evaluate_js(f'window.handleAiStream("{encoded_chunk}");')
@@ -846,22 +779,21 @@ class Api:
         elif action_type == 'set_overlay_agent':
             if not payload or 'square' not in payload or 'agent_name' not in payload:
                 return {"success": False, "message": "Missing payload for set_overlay_agent"}
-            
+
             square = payload.get('square')
             agent_name = payload.get('agent_name')
 
             if not isinstance(square, int) or not (1 <= square <= 14):
                 return {"success": False, "message": "Square must be an integer between 1 and 14"}
 
-            # Find the agent's image path
             agent_image = ""
-            # This is inefficient, but it's the easiest way to reuse the existing logic
+
             all_agents = self.get_agent_list('attackers') + self.get_agent_list('defenders')
             for agent in all_agents:
                 if agent['name'].lower() == agent_name.lower():
                     agent_image = agent['image']
                     break
-            
+
             if not agent_image:
                 return {"success": False, "message": f"Agent '{agent_name}' not found"}
 
@@ -872,7 +804,7 @@ class Api:
         elif action_type == 'remove_overlay_agent':
             if not payload or 'square' not in payload:
                 return {"success": False, "message": "Missing payload for remove_overlay_agent"}
-            
+
             square = payload.get('square')
 
             if not isinstance(square, int) or not (1 <= square <= 14):
@@ -891,19 +823,15 @@ class Api:
             response.raise_for_status()
             result = response.json()
             if result.get("success"):
-                # Atualiza as configurações com o ID do usuário e o token da app.
-                # O 'identificador' já existe no cliente e não é mais enviado pelo servidor.
+
                 self.recoil_controller.settings.discord_user_id = result.get("discord_user_id")
                 self.recoil_controller.settings.discord_username = result.get("discord_username")
                 self.recoil_controller.settings.app_id = result.get("app_id")
-                
-                # Salva as configurações atualizadas
+
                 self.save_settings()
 
-                # Sinaliza que está online após a autenticação bem-sucedida
                 self.signal_online()
-                
-                # Retorna sucesso com os dados do usuário
+
                 return {"success": True, "data": result}
             else:
                 return {"success": False, "message": result.get("message", "Falha na autenticação")}
@@ -917,12 +845,12 @@ class Api:
     def logout(self):
         """Clears Discord authentication details from settings."""
         try:
-            # Fields to clear on logout
+
             fields_to_clear = ['discord_user_id', 'app_id', 'discord_username']
             for field in fields_to_clear:
                 if hasattr(self.recoil_controller.settings, field):
                     setattr(self.recoil_controller.settings, field, None)
-            
+
             self.save_settings()
             print("User logged out, settings cleared.")
             return {"success": True}
@@ -961,7 +889,7 @@ class Api:
 
         def poll():
             import time
-            time.sleep(5) # Initial delay
+            time.sleep(5) 
             while True:
                 try:
                     response = requests.get(f"{NGROK_BASE_URL}/online", timeout=5)
@@ -972,11 +900,11 @@ class Api:
                         if self._window:
                             self._window.evaluate_js(f'updateOnlineCount({count})')
                 except requests.exceptions.RequestException:
-                    pass # Fail silently on network errors
+                    pass 
                 except Exception as e:
                     print(f"Unexpected error in online count poller: {e}")
-                
-                time.sleep(45) # Poll every 30 seconds
+
+                time.sleep(45) 
 
         self.online_count_poller = threading.Thread(target=poll, daemon=True)
         self.online_count_poller.start()
@@ -1029,7 +957,7 @@ class Api:
             response = requests.get(update_url)
             response.raise_for_status()
             latest_version = response.text.strip()
-            
+
             if latest_version > __version__:
                 return {"update_available": True, "latest_version": latest_version, "current_version": __version__}
             else:
@@ -1041,7 +969,6 @@ class Api:
             print(f"An unexpected error occurred while checking for updates: {e}")
             return {"update_available": False, "error": str(e)}
 
-# --- Windows Title Bar Dark Mode ---
 def enable_dark_title_bar(window_title: str) -> bool:
     """Enable dark title bar on Windows 10/11 for a given window title.
 
@@ -1053,14 +980,12 @@ def enable_dark_title_bar(window_title: str) -> bool:
         if not hwnd:
             return False
 
-        # DWM attribute for dark mode: 20 on 1903+, 19 on 1809
         DWMWA_USE_IMMERSIVE_DARK_MODE = 20
         DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_1903 = 19
 
         value = ctypes.c_int(1)
         dwmapi = ctypes.windll.dwmapi
 
-        # Try attr 20 first, then 19
         result = dwmapi.DwmSetWindowAttribute(hwnd,
                                               ctypes.c_uint(DWMWA_USE_IMMERSIVE_DARK_MODE),
                                               ctypes.byref(value),
@@ -1080,8 +1005,8 @@ def set_titlebar_appearance(
     caption_color_rgb: tuple = (26, 26, 26),
     text_color_rgb: tuple = (234, 234, 234),
     border_color_rgb: tuple = (58, 58, 58),
-    backdrop: str = "mica",  # options: 'none', 'mica', 'tabbed', 'auto'
-    corner: str = "round"     # options: 'default', 'notround', 'round', 'small'
+    backdrop: str = "mica",  
+    corner: str = "round"     
 ) -> bool:
     """Customize native Windows title bar colors/backdrop (Windows 11 22H2+).
 
@@ -1096,16 +1021,13 @@ def set_titlebar_appearance(
         dwmapi = ctypes.windll.dwmapi
         applied_any = False
 
-        # Helper to convert (R,G,B) to COLORREF (0x00BBGGRR)
         def to_colorref(rgb: tuple) -> ctypes.c_int:
             r, g, b = rgb
             return ctypes.c_int((b << 16) | (g << 8) | r)
 
-        # Dark mode (keep for downlevel support)
         if dark_mode:
             enable_dark_title_bar(window_title)
 
-        # Title bar colors (Win11 22H2+)
         DWMWA_BORDER_COLOR = 34
         DWMWA_CAPTION_COLOR = 35
         DWMWA_TEXT_COLOR = 36
@@ -1123,7 +1045,6 @@ def set_titlebar_appearance(
         except Exception:
             pass
 
-        # Corner preference
         DWMWA_WINDOW_CORNER_PREFERENCE = 33
         corner_map = {
             "default": 0,
@@ -1138,13 +1059,12 @@ def set_titlebar_appearance(
         except Exception:
             pass
 
-        # Backdrop (Mica/Tabbed)
         DWMWA_SYSTEMBACKDROP_TYPE = 38
         backdrop_map = {
-            "auto": 0,    # DWMSBT_AUTO
-            "none": 1,    # DWMSBT_NONE
-            "mica": 2,    # DWMSBT_MAINWINDOW (Mica)
-            "tabbed": 4,  # DWMSBT_TABBEDWINDOW (Mica Alt)
+            "auto": 0,    
+            "none": 1,    
+            "mica": 2,    
+            "tabbed": 4,  
         }
         try:
             backdrop_val = ctypes.c_int(backdrop_map.get(backdrop, 2))
@@ -1156,8 +1076,6 @@ def set_titlebar_appearance(
         return applied_any
     except Exception:
         return False
-
-
 
 def remove_titlebar_icon(window_title: str) -> bool:
     """Remove the small and big icons from the native title bar on Windows."""
@@ -1173,12 +1091,10 @@ def remove_titlebar_icon(window_title: str) -> bool:
         ICON_BIG = 1
         ICON_SMALL2 = 2
 
-        # Clear window icons
         user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, 0)
         user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, 0)
         user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL2, 0)
 
-        # Also clear class icons for reliability
         GCLP_HICON = -14
         GCLP_HICONSM = -34
         try:
@@ -1191,14 +1107,13 @@ def remove_titlebar_icon(window_title: str) -> bool:
             except Exception:
                 pass
 
-        # Remove icon gap by adding WS_EX_DLGMODALFRAME and forcing non-client refresh
         WS_EX_DLGMODALFRAME = 0x0001
         SWP_NOSIZE = 0x0001
         SWP_NOMOVE = 0x0002
         SWP_NOZORDER = 0x0004
         SWP_FRAMECHANGED = 0x0020
         try:
-            # Prefer 64-bit aware API
+
             GetWindowLongPtrW = ctypes.windll.user32.GetWindowLongPtrW
             SetWindowLongPtrW = ctypes.windll.user32.SetWindowLongPtrW
             GetWindowLongPtrW.restype = ctypes.c_longlong
@@ -1215,7 +1130,6 @@ def remove_titlebar_icon(window_title: str) -> bool:
             except Exception:
                 pass
 
-        # Apply style change
         ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
                                           SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
         return True
@@ -1231,11 +1145,10 @@ def set_transparent_titlebar_icon(window_title: str) -> bool:
         if not hwnd:
             return False
 
-        # Create 1x1 monochrome mask bitmap filled with 1s (transparent)
         cx = cy = 1
         planes = 1
         bpp = 1
-        # one byte with all bits set -> transparent
+
         bits = (ctypes.c_ubyte * 1)(0xFF)
         hbmMask = gdi32.CreateBitmap(cx, cy, planes, bpp, ctypes.byref(bits))
         if not hbmMask:
@@ -1258,7 +1171,7 @@ def set_transparent_titlebar_icon(window_title: str) -> bool:
         iconinfo.hbmColor = 0
 
         hIcon = ctypes.windll.user32.CreateIconIndirect(ctypes.byref(iconinfo))
-        # release mask bitmap
+
         gdi32.DeleteObject(hbmMask)
 
         if not hIcon:
@@ -1300,7 +1213,6 @@ def set_titlebar_icon_from_file(window_title: str, ico_path: str) -> bool:
         if not hwnd:
             return False
 
-        # Load icon from file
         LR_DEFAULTSIZE = 0x0040
         LR_LOADFROMFILE = 0x0010
         hIcon = ctypes.windll.user32.LoadImageW(0, ico_path, 1, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE)
@@ -1350,22 +1262,19 @@ def strip_system_menu_and_caption(window_title: str) -> bool:
     except Exception:
         return False
 
-
-# --- Simple Web Server ---
 def start_server(directory, port):
     """Starts an HTTP server to serve the UI files."""
-    # Ensure the server serves from the project root to access 'Agents' folder
+
     original_cwd = os.getcwd()
     os.chdir(os.path.join(get_base_path(), 'webview_ui'))
-    
+
     handler = http.server.SimpleHTTPRequestHandler
     with socketserver.TCPServer(("", port), handler) as httpd:
         print(f"Local server started at http://localhost:{port}")
         print(f"Serving files from: {get_base_path()}")
         httpd.serve_forever()
-    os.chdir(original_cwd) # Restore original working directory
+    os.chdir(original_cwd) 
 
-# --- Main Application Function ---
 def main():
     """Creates and manages the application window."""
     print("Creating API instance")
@@ -1373,37 +1282,33 @@ def main():
     print("API instance created")
     print("API methods:", [method for method in dir(api) if not method.startswith('_')])
     print("check_pin_auth in API:", hasattr(api, 'check_pin_auth'))
-    port = 8077  # A different port to avoid conflicts
+    port = 8077  
 
-    # Start the server in a separate thread
     server_thread = threading.Thread(target=start_server, args=('webview_ui', port))
     server_thread.daemon = True
     server_thread.start()
 
-    # Create the webview window
     print("Creating webview window with API")
     print("API object:", api)
     print("API methods before window creation:", [method for method in dir(api) if not method.startswith('_')])
     window = webview.create_window(
         'Recoil Control v3 - Beta',
-        f'http://localhost:{port}/index.html', # Serve index.html from webview_ui subfolder
+        f'http://localhost:{port}/index.html', 
         js_api=api,
         width=910,
         height=512,
         resizable=True
     )
     print("Webview window created")
-    api.set_window(window) # Pass window object to API for JS communication
+    api.set_window(window) 
 
     def on_closed():
         api.signal_offline()
         api.stop_listeners()
 
-    # Start pynput listeners after the window is created
     window.events.closed += on_closed
     window.events.loaded += api.start_listeners
 
-    # On first load, push settings to the UI explicitly from Python (source of truth)
     def _push_settings_to_ui():
         try:
             payload = json.dumps(api.get_settings())
@@ -1427,14 +1332,13 @@ def main():
         except Exception as e:
             print(f"Failed to push settings to UI: {e}")
     window.events.loaded += _push_settings_to_ui
-    
-    # Apply dark title bar once the window is shown/loaded
+
     def _apply_titlebar_style():
-        # Keep native caption, customize appearance and hide only the icon frame
+
         applied = set_titlebar_appearance('Recoil Control v3 - Beta', True, (15, 15, 16), (234, 234, 234), (58, 58, 58), 'mica', 'round')
         if not applied:
             print('Titlebar customization not applied (OS/version may not support).')
-        # Set custom icon from webview_ui/icon.ico and re-apply shortly after to ensure it sticks
+
         def _apply_icon():
             icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'webview_ui', 'icon.ico')
             if not os.path.exists(icon_path):
@@ -1450,7 +1354,6 @@ def main():
             pass
     window.events.loaded += _apply_titlebar_style
 
-    # Check for updates on startup if enabled
     if api.recoil_controller.settings.show_about_on_startup:
         def _check_for_updates_on_load():
             try:
@@ -1480,13 +1383,11 @@ def main():
 
         window.events.loaded += _check_for_updates_on_load
 
-    # Start the GUI event loop with Edge (Chromium) backend for frameless + drag support
     try:
         webview.start(gui='edgechromium', debug=False)
     except Exception as e:
         print(f"Could not start the application. Please ensure the WebView2 runtime is installed. Error: {e}")
         sys.exit(1)
-
 
 if __name__ == '__main__':
     main()
