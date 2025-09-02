@@ -1,7 +1,10 @@
-customtkinter
-CTkMessagebox
-pynput
-Pillow
 numpy
+pynput
+requests
+CTkMessagebox
+Pillow
+scipy
 pywin32
-scipy 
+pywebview[tkinter]
+mss
+pyautogui
