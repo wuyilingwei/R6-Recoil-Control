@@ -70,12 +70,12 @@ Click the "Presets" button to open the preset management window:
 
 This project includes an executable (`.exe`) built using [PyInstaller](https://www.pyinstaller.org/), a widely-used packaging tool for Python projects. Although legitimate, executables created with PyInstaller may occasionally trigger **false positives** in less well-known antivirus software.
 
-To ensure transparency, we conducted a full scan using [VirusTotal](https://www.virustotal.com/gui/file/16fbbdf06d640cf6bf08d2d46fa075b433b43643c209b9d7835506c15ae82893/detection). Here are the results:
+To ensure transparency, we conducted a full scan using [VirusTotal](https://www.virustotal.com/gui/file/9b115cae757e2c7782f8bc991fba98fa3747fa12b7fcde01cca538c0176266f0). Here are the results:
 
 ### 🧪 Scan Summary:
 | Status                  | Details                                                                 |
 |------------------------|--------------------------------------------------------------------------|
-| ✅ Safe on 69/71       | Confirmed clean by Microsoft Defender, Kaspersky, BitDefender, Avast, AVG, McAfee, Malwarebytes, and other major vendors. |
+| ✅ Safe on 54/56       | Confirmed clean by Microsoft Defender, Kaspersky, BitDefender, Avast, AVG, McAfee, Malwarebytes, and other major vendors. |
 | ⚠️ False positives on 2  | Flagged by 2 lesser-known antivirus engines due to generic heuristics related to PyInstaller usage. |
 | 📜 Detection rule        | Based on a [public YARA rule](https://github.com/bartblaze/Yara-rules) identifying PyInstaller-packaged files — **not actual malware**. |
 
