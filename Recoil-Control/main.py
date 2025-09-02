@@ -1,592 +1,569 @@
-import sys
+import webview
+import http.server
+import socketserver
+import threading
 import os
 import json
-import logging
-import requests
-import shutil
+import sys
+import requests # Import requests
+import subprocess # Import subprocess for update
+import shutil # Import shutil for file operations
+import ctypes
+import base64
+from settings_manager import SettingsManager, CONFIG_DIR
 from typing import Optional
-import subprocess
-import threading
-import time
 
-NGROK_BASE_URL = "https://proven-on-owl.ngrok-free.app"
+try:
+    from PIL import Image
+except Exception:
+    Image = None
 
-__version__ = "2.0.0"
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
+# Import additional libraries for overlay functionality
+try:
+    import win32gui
+    import win32con
+    import win32api
+except ImportError:
+    win32gui = None
+    win32con = None
+    win32api = None
 
-COLOR_BACKGROUND = "#121212"
-COLOR_FRAME = "#1A1A1A"
-COLOR_ACCENT = "#007BFF"
-COLOR_ACCENT_DARK = "#004C99"
-COLOR_ACCENT_LIGHT = "#66B2FF"
-COLOR_TEXT = "#EAEAEA"
-COLOR_DANGER = "#e83434"
-COLOR_SUCCESS = "#0fa711"
-COLOR_HOVER = "#0056b3"
+# Controller support removed
 
-FONT_FAMILY = "Segoe UI"
-FONT_TITLE = (FONT_FAMILY, 18, "bold")
-FONT_SUBTITLE = (FONT_FAMILY, 14, "bold")
-FONT_BODY = (FONT_FAMILY, 12)
-FONT_BUTTON = (FONT_FAMILY, 12, "bold")
+from recoil_controller import RecoilController
+from pynput import keyboard, mouse
+from pynput.mouse import Button
 
-TRANSLATIONS = {
-    "en": {
-        "settings": "Settings",
-        "general": "General",
-        "language": "Language",
-        "shoot_delay": "Shoot Delay (s):",
-        "max_shots": "Max Shots:",
-        "sensitivity": "Sensitivity",
-        "mouse_dpi": "Mouse DPI:",
-        "game_sensitivity": "Game Sensitivity:",
-        "global_sensitivity_multiplier": "Global Sensitivity Multiplier:",
-        "hotkeys": "Hotkeys",
-        "primary_weapon_1": "Primary Weapon 1:",
-        "primary_weapon_2": "Primary Weapon 2:",
-        "secondary_weapon_1": "Secondary Weapon 1:",
-        "secondary_weapon_2": "Secondary Weapon 2:",
-        "record": "Record",
-        "press_key_prompt": "Press a key or mouse button...",
-        "tbag_macro": "T-bag Macro",
-        "activation_hotkey": "Activation Hotkey:",
-        "action_key": "Action Key:",
-        "delay_s": "Delay (s):",
-        "version_info": "Version {__version__} | Created by K1ngPT-X",
-        "language_change": "Language Change",
-        "restart_prompt": "Please restart the application for the language changes to take full effect.",
-        "app_title": "Recoil Control",
-        "primary": "Primary",
-        "secondary": "Secondary",
-        "enable_tbag_macro": "T-bag Macro",
-        "presets": "Presets",
-        "advanced": "Advanced",
-        "disabled": "Disabled",
-        "enabled": "Enabled",
-        "vertical_recoil": "Vertical Recoil (Y)",
-        "horizontal_recoil": "Horizontal Recoil (X)",
-        "enable_secondary_weapon": "Enable Secondary Weapon",
-        "about": "About",
-        "created_by": "Created by K1ngPT-X",
-        "do_not_show_again": "Do not show again",
-        "close": "Close",
-        "agent_presets": "Agent Presets",
-        "attackers": "Attackers",
-        "defenders": "Defenders",
-        "previous": "Previous",
-        "next": "Next",
-        "page_info": "Page {current_page} of {total_pages}",
-        "presets_for": "Presets for {agent_name}",
-        "save_preset": "Save Preset",
-        "enter_preset_name": "Enter preset name...",
-        "save": "Save",
-        "manage_existing": "Manage Existing",
-        "no_presets_found": "No presets found",
-        "load": "Load",
-        "delete": "Delete",
-        "confirm_load_title": "Confirm Load Preset",
-        "confirm_load_message": "Are you sure you want to load the preset '{selected_preset}'?\nThis will overwrite current settings.",
-        "confirm_delete_title": "Confirm Delete Preset",
-        "confirm_delete_message": "Are you sure you want to delete the preset '{selected_preset}'?",
-        "warning": "Warning",
-        "select_preset_to_load": "Please select a preset to load.",
-        "select_preset_to_delete": "Please select a preset to delete.",
-        "error": "Error",
-        "preset_not_found": "Preset file not found: {preset_file_path}",
-        "error_loading_preset": "Error loading preset: {e}",
-        "error_saving_preset": "Error saving preset: {e}",
-        "error_deleting_preset": "Error deleting preset: {e}",
-        "success": "Success",
-        "preset_loaded_successfully": "Preset '{selected_preset}' loaded successfully for {agent_name}!",
-        "preset_saved_successfully": "Preset '{preset_name}' saved for {agent_name}!",
-        "preset_deleted_successfully": "Preset '{selected_preset}' deleted successfully!",
-        "enter_preset_name_error": "Please enter a name for the preset.",
-        "ask_ai_placeholder": "Ask the AI for help or to make a change...",
-        "ask_ai_button": "Ask AI",
-        "chat_title": "AI Assistant Chat",
-        "chat_input_placeholder": "Type your message here...",
-        "chat_send_button": "Send",
-        "pin_dialog_title": "Enter PIN",
-        "enter_pin_prompt": "Please enter the PIN you received from the Discord bot to send a report",
-        "report_auth_required_message": "To use /report, you need to authenticate your Discord account. Type /login on Discord to get a PIN and enter it in the box that appears. This helps us identify you for better support, as moderators receive the chat history."
-    },
-    "pt": {
-        "settings": "Configurações",
-        "general": "Geral",
-        "language": "Idioma",
-        "shoot_delay": "Atraso de Disparo (s):",
-        "max_shots": "Máximo de Disparos:",
-        "sensitivity": "Sensibilidade",
-        "mouse_dpi": "DPI do Mouse:",
-        "game_sensitivity": "Sensibilidade do Jogo:",
-        "global_sensitivity_multiplier": "Multiplicador Global de Sensibilidade:",
-        "hotkeys": "Teclas de Atalho",
-        "primary_weapon_1": "Arma Primária 1:",
-        "primary_weapon_2": "Arma Primária 2:",
-        "secondary_weapon_1": "Arma Secundária 1:",
-        "secondary_weapon_2": "Arma Secundária 2:",
-        "record": "Gravar",
-        "press_key_prompt": "Pressione uma tecla ou botão do mouse...",
-        "tbag_macro": "Macro T-bag",
-        "activation_hotkey": "Tecla de Ativação:",
-        "action_key": "Tecla de Ação:",
-        "delay_s": "Atraso (s):",
-        "version_info": "Versão {__version__} | Criado por K1ngPT-X",
-        "language_change": "Mudança de Idioma",
-        "restart_prompt": "Por favor, reinicie a aplicação para que as alterações de idioma tenham efeito.",
-        "app_title": "Controle de Recuo",
-        "primary": "Primária",
-        "secondary": "Secundária",
-        "enable_tbag_macro": "Macro T-bag",
-        "presets": "Predefinições",
-        "advanced": "Avançado",
-        "disabled": "Desativado",
-        "enabled": "Ativado",
-        "vertical_recoil": "Recuo Vertical (Y)",
-        "horizontal_recoil": "Recuo Horizontal (X)",
-        "enable_secondary_weapon": "Ativar Arma Secundária",
-        "about": "Sobre",
-        "created_by": "Criado por K1ngPT-X",
-        "do_not_show_again": "Não mostrar novamente",
-        "close": "Fechar",
-        "agent_presets": "Predefinições de Agentes",
-        "attackers": "Atacantes",
-        "defenders": "Defensores",
-        "previous": "Anterior",
-        "next": "Próximo",
-        "page_info": "Página {current_page} de {total_pages}",
-        "presets_for": "Predefinições para {agent_name}",
-        "save_preset": "Salvar Predefinição",
-        "enter_preset_name": "Digite o nome da predefinição...",
-        "save": "Salvar",
-        "manage_existing": "Gerenciar Existentes",
-        "no_presets_found": "Nenhuma predefinição encontrada",
-        "load": "Carregar",
-        "delete": "Excluir",
-        "confirm_load_title": "Confirmar Carregamento",
-        "confirm_load_message": "Tem certeza de que deseja carregar a predefinição '{selected_preset}'?\nIsso substituirá as configurações atuais.",
-        "confirm_delete_title": "Confirmar Exclusão",
-        "confirm_delete_message": "Tem certeza de que deseja excluir a predefinição '{selected_preset}'?",
-        "warning": "Aviso",
-        "select_preset_to_load": "Por favor, selecione uma predefinição para carregar.",
-        "select_preset_to_delete": "Por favor, selecione uma predefinição para excluir.",
-        "error": "Erro",
-        "preset_not_found": "Arquivo de predefinição não encontrado: {preset_file_path}",
-        "error_loading_preset": "Erro ao carregar predefinição: {e}",
-        "error_saving_preset": "Erro ao salvar predefinição: {e}",
-        "error_deleting_preset": "Erro ao excluir predefinição: {e}",
-        "success": "Sucesso",
-        "preset_loaded_successfully": "Predefinição '{selected_preset}' carregada com sucesso para {agent_name}!",
-        "preset_saved_successfully": "Predefinição '{preset_name}' salva com sucesso para {agent_name}!",
-        "preset_deleted_successfully": "Predefinição '{selected_preset}' excluída com sucesso!",
-        "enter_preset_name_error": "Por favor, digite um nome para a predefinição.",
-        "ask_ai_placeholder": "Peça ajuda à IA ou para fazer uma alteração...",
-        "ask_ai_button": "Perguntar à IA",
-        "chat_title": "Chat com Assistente de IA",
-        "chat_input_placeholder": "Digite sua mensagem aqui...",
-        "chat_send_button": "Enviar",
-        "pin_dialog_title": "Inserir PIN",
-        "enter_pin_prompt": "Para enviar um relatório, insira o PIN que você recebeu do bot do Discord",
-        "report_auth_required_message": "Para usar o /report, você precisa autenticar sua conta Discord. Digite /login no Discord para obter um PIN e insira-o na caixa que aparecerá. Isso nos ajuda a identificar você para melhor suporte, pois os moderadores recebem o histórico do chat."
-    }
-}
-
-def center_window(window, width, height):
-    """Centers a tkinter window on the screen."""
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-    x = (screen_width // 2) - (width // 2)
-    y = (screen_height // 2) - (height // 2)
-    window.geometry(f"{width}x{height}+{x}+{y}")
-
-def run_update_check_and_exit_if_needed():
-    update_url = "https://raw.githubusercontent.com/K1ngPT-X/R6-Recoil-Control/refs/heads/main/Version.txt"
-    try:
-        response = requests.get(update_url)
-        response.raise_for_status()
-        latest_version = response.text.strip()
-        
-        if latest_version > __version__:
-            from CTkMessagebox import CTkMessagebox
-            msg = CTkMessagebox(title="New Version Available",
-                                message=f"A new version ({latest_version}) is available! Your current version is ({__version__}).\nDo you want to download now?",
-                                option_1="No", option_2="Yes", icon="question")
-            response = msg.get()
-            if response == "Yes":
-                download_link = f"https://github.com/K1ngPT-X/R6-Recoil-Control/releases/download/v{latest_version}/R6-Recoil-Control.exe"
-                
-                downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
-                os.makedirs(downloads_folder, exist_ok=True)
-                output_path = os.path.join(downloads_folder, f"R6-Recoil-Control_v{latest_version}.exe")
-                
-                try:
-                    with requests.get(download_link, stream=True) as r:
-                        r.raise_for_status()
-                        with open(output_path, 'wb') as f:
-                            shutil.copyfileobj(r.raw, f)
-                    CTkMessagebox(title="Download Complete", message=f"The new version has been downloaded to:\n{output_path}\nThe application will be updated and restarted automatically.", icon="info").get()
-
-                    current_app_path = os.path.join(CONFIG_DIR, "output", "R6-Recoil-Control.exe")
-                    updater_script_path = os.path.join(script_dir, "update.exe")
-                    
-                    subprocess.Popen([updater_script_path, current_app_path, output_path])
-                    
-                    sys.exit()
-
-                except requests.exceptions.RequestException as req_e:
-                    logging.error(f"Could not download the update: {req_e}\nPlease check the link or your connection.")
-                    CTkMessagebox(title="Download Error", message=f"Could not download the update: {req_e}\nPlease check the link or your connection.", icon="cancel").get()
-                except Exception as e:
-                    logging.error(f"An error occurred while saving the file: {e}")
-                    CTkMessagebox(title="Error", message=f"An error occurred while saving the file: {e}", icon="cancel").get()
-        else:
-            logging.info("You already have the latest version.")
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Error checking for updates: {e}")
-    except Exception as e:
-        logging.error(f"An unexpected error occurred while checking for updates: {e}")
-
-if getattr(sys, 'frozen', False):
-    CONFIG_DIR = os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "RecoilControl")
-else:
-    CONFIG_DIR = script_dir
+# Define o diretório de configuração em %APPDATA%\Recoil Control
+settings_manager = SettingsManager()
 
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
-import customtkinter
-import tkinter as tk
-from CTkMessagebox import CTkMessagebox
+# Versão da aplicação (do main.py original)
+__version__ = "3.0.0"
 
-from pynput import keyboard, mouse
-from pynput.mouse import Button
-from PIL import Image
-from rate_limiter import RateLimiter
+# NGROK_BASE_URL (from main.py)
+NGROK_BASE_URL = "https://api.recoilcontrol.app"
 
-try:
-    from recoil_controller import RecoilController
-except ImportError:
-    logging.error("Module 'recoil_controller' not found.")
-    sys.exit(1)
+# KEY_MAP do main.py original
+KEY_MAP = {
+    0x04: "MIDDLE BUTTON", 0x05: "SIDE BUTTON 1", 0x06: "SIDE BUTTON 2",
+    0x08: "BACKSPACE", 0x09: "TAB", 0x0D: "ENTER", 0x10: "SHIFT", 0x11: "CONTROL",
+    0x12: "ALT", 0x14: "CAPSLOCK", 0x1B: "ESCAPE", 0x20: "SPACE", 0x25: "ARROWLEFT",
+    0x26: "ARROWUP", 0x27: "ARROWRIGHT", 0x28: "ARROWDOWN", 0x2E: "DELETE",
+    # Add mappings for L/R variants to match JS e.key logic
+    0xA0: "SHIFT", 0xA1: "SHIFT",       # VK_LSHIFT, VK_RSHIFT
+    0xA2: "CONTROL", 0xA3: "CONTROL",   # VK_LCONTROL, VK_RCONTROL
+    0xA4: "ALT", 0xA5: "ALT",           # VK_LMENU, VK_RMENU
+    **{i: chr(i) for i in range(ord('0'), ord('9') + 1)},
+    **{i: chr(i) for i in range(ord('A'), ord('Z') + 1)},
+    **{i + 0x6F: f"F{i}" for i in range(1, 13)},
+    0x90: "NUMLOCK", 0xBA: ";", 0xBB: "=", 0xBC: ",", 0xBD: "-", 0xBE: ".", 0xBF: "/", 0xC0: "'",
+    0xDB: "[", 0xDC: "\"", 0xDD: "]", 0xDE: "`",
+}
 
+# Invert KEY_MAP for faster lookup from pynput key objects
+INVERTED_KEY_MAP = {v: k for k, v in KEY_MAP.items()}
 
-class SettingsDialog(customtkinter.CTkToplevel):
-    def __init__(self, recoil_controller, main_app_instance, parent=None):
-        super().__init__(parent)
-        self.recoil_controller = recoil_controller
-        self.main_app_instance = main_app_instance
-        center_window(self, 450, 650)
-        self.configure(fg_color=COLOR_BACKGROUND)
-        self.init_ui()
-        self.update_ui_text()
+def get_base_path():
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
 
-    def _(self, key, **kwargs):
-        return self.main_app_instance._(key, **kwargs)
+# --- API Bridge between Python and JavaScript ---
+class Api:
+    def __init__(self):
+        self._window = None
+        self._recoil_active = False
+        self.recoil_controller = RecoilController()
+        self.keyboard_listener = None
+        self.mouse_listener = None
+        self.overlay_window = None
+        self.current_zoom_index = 0
+        self.current_overlay_square_index = -1
+        self.overlay_agents = []
+        self.online_count_poller = None
+        # Load settings on initialization
+        self.load_settings()
+        self.signal_online()
+        self.start_online_count_poller()
+        self.overlay_squares = [None] * 14
 
-    def init_ui(self):
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
-
-        scroll_frame = customtkinter.CTkScrollableFrame(self, fg_color=COLOR_BACKGROUND)
-        scroll_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        scroll_frame.grid_columnconfigure(0, weight=1)
-
-        self.general_frame = customtkinter.CTkFrame(scroll_frame, fg_color=COLOR_FRAME, border_width=0)
-        self.general_frame.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="ew")
-        self.general_frame.grid_columnconfigure(1, weight=1)
-
-        self.general_label = customtkinter.CTkLabel(self.general_frame, text="", font=FONT_SUBTITLE)
-        self.general_label.grid(row=0, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="w")
-        
-        self.language_label = customtkinter.CTkLabel(self.general_frame, text="", font=FONT_BODY)
-        self.language_label.grid(row=1, column=0, sticky="w", padx=10, pady=5)
-        self.language_menu = customtkinter.CTkOptionMenu(self.general_frame, values=["English", "Português"], command=self.on_language_change, font=FONT_BODY)
-        self.language_menu.grid(row=1, column=1, sticky="ew", padx=10, pady=5)
-        
-        current_language = getattr(self.recoil_controller.settings, 'language', 'en')
-        self.language_menu.set("Português" if current_language == "pt" else "English")
-
-        self.settings_labels = {}
-        settings_items = {
-            "shoot_delay": ("shoot_delay_spinbox", "shoot_delay"),
-            "max_shots": ("max_shots_spinbox", "max_shots"),
-        }
-
-        for i, (key, (widget_name, setting_key)) in enumerate(settings_items.items(), start=2):
-            label = customtkinter.CTkLabel(self.general_frame, text="", font=FONT_BODY)
-            label.grid(row=i, column=0, sticky="w", padx=10, pady=5)
-            self.settings_labels[key] = label
-            entry = customtkinter.CTkEntry(self.general_frame, font=FONT_BODY)
-            entry.insert(0, str(getattr(self.recoil_controller.settings, setting_key)))
-            entry.grid(row=i, column=1, sticky="ew", padx=10, pady=5)
-            entry.bind("<Return>", self.update_settings_event)
-            entry.bind("<FocusOut>", self.update_settings_event)
-            setattr(self, widget_name, entry)
-
-        self.hotkeys_frame = customtkinter.CTkFrame(scroll_frame, fg_color=COLOR_FRAME, border_width=0)
-        self.hotkeys_frame.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
-        self.hotkeys_frame.grid_columnconfigure(1, weight=1)
-
-        self.hotkeys_label = customtkinter.CTkLabel(self.hotkeys_frame, text="", font=FONT_SUBTITLE)
-        self.hotkeys_label.grid(row=0, column=0, columnspan=3, padx=10, pady=(5, 10), sticky="w")
-
-        self.hotkey_items_labels = {}
-        self.hotkey_record_buttons = {}
-        hotkey_items = {
-            "primary_weapon_1": ("primary_hotkey_input", "primary_weapon_hotkey"),
-            "primary_weapon_2": ("primary_hotkey_2_input", "primary_weapon_hotkey_2"),
-            "secondary_weapon_1": ("secondary_hotkey_input", "secondary_weapon_hotkey"),
-            "secondary_weapon_2": ("secondary_hotkey_2_input", "secondary_weapon_hotkey_2"),
-        }
-
-        for i, (key, (widget_name, setting_key)) in enumerate(hotkey_items.items(), start=1):
-            label = customtkinter.CTkLabel(self.hotkeys_frame, text="", font=FONT_BODY)
-            label.grid(row=i, column=0, sticky="w", padx=10, pady=5)
-            self.hotkey_items_labels[key] = label
-
-            entry = customtkinter.CTkEntry(self.hotkeys_frame, state="readonly", font=FONT_BODY)
-            entry.grid(row=i, column=1, sticky="ew", padx=10, pady=5)
-            entry.configure(state="normal")
-            entry.delete(0, tk.END)
-            entry.insert(0, ", ".join(getattr(self.recoil_controller.settings, setting_key)))
-            entry.configure(state="readonly")
-            setattr(self, widget_name, entry)
-            
-            button = customtkinter.CTkButton(self.hotkeys_frame, text="", width=80, font=FONT_BUTTON, command=lambda e=entry, sk=setting_key: self.start_hotkey_capture(e, sk))
-            button.grid(row=i, column=2, padx=10, pady=5)
-            self.hotkey_record_buttons[key] = button
-
-        self.tbag_frame = customtkinter.CTkFrame(scroll_frame, fg_color=COLOR_FRAME, border_width=0)
-        self.tbag_frame.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
-        self.tbag_frame.grid_columnconfigure(1, weight=1)
-
-        self.tbag_label = customtkinter.CTkLabel(self.tbag_frame, text="", font=FONT_SUBTITLE)
-        self.tbag_label.grid(row=0, column=0, columnspan=3, padx=10, pady=(5, 10), sticky="w")
-
-        self.tbag_activation_label = customtkinter.CTkLabel(self.tbag_frame, text="", font=FONT_BODY)
-        self.tbag_activation_label.grid(row=1, column=0, sticky="w", padx=10, pady=5)
-        self.t_bag_hotkey_input = customtkinter.CTkEntry(self.tbag_frame, state="readonly", font=FONT_BODY)
-        self.t_bag_hotkey_input.grid(row=1, column=1, sticky="ew", padx=10, pady=5)
-        self.tbag_hotkey_record_button = customtkinter.CTkButton(self.tbag_frame, text="", width=80, font=FONT_BUTTON, command=lambda: self.start_hotkey_capture(self.t_bag_hotkey_input, "t_bag_hotkey"))
-        self.tbag_hotkey_record_button.grid(row=1, column=2, padx=10, pady=5)
-        self.t_bag_hotkey_input.configure(state="normal")
-        self.t_bag_hotkey_input.delete(0, tk.END)
-        self.t_bag_hotkey_input.insert(0, ", ".join(getattr(self.recoil_controller.settings, setting_key)))
-        self.t_bag_hotkey_input.configure(state="readonly")
-
-        self.tbag_action_key_label = customtkinter.CTkLabel(self.tbag_frame, text="", font=FONT_BODY)
-        self.tbag_action_key_label.grid(row=2, column=0, sticky="w", padx=10, pady=5)
-        self.t_bag_key_input = customtkinter.CTkEntry(self.tbag_frame, state="readonly", font=FONT_BODY)
-        self.t_bag_key_input.grid(row=2, column=1, sticky="ew", padx=10, pady=5)
-        self.tbag_key_record_button = customtkinter.CTkButton(self.tbag_frame, text="", width=80, font=FONT_BUTTON, command=lambda: self.start_hotkey_capture(self.t_bag_key_input, "t_bag_key"))
-        self.tbag_key_record_button.grid(row=2, column=2, padx=10, pady=5)
-        self.t_bag_key_input.configure(state="normal")
-        self.t_bag_key_input.delete(0, tk.END)
-        self.t_bag_key_input.insert(0, self.recoil_controller.settings.t_bag_key)
-        self.t_bag_key_input.configure(state="readonly")
-
-        self.tbag_delay_label = customtkinter.CTkLabel(self.tbag_frame, text="", font=FONT_BODY)
-        self.tbag_delay_label.grid(row=3, column=0, sticky="w", padx=10, pady=5)
-        self.t_bag_delay_spinbox = customtkinter.CTkEntry(self.tbag_frame, font=FONT_BODY)
-        self.t_bag_delay_spinbox.insert(0, str(self.recoil_controller.settings.t_bag_delay))
-        self.t_bag_delay_spinbox.grid(row=3, column=1, sticky="ew", padx=10, pady=5)
-        self.t_bag_delay_spinbox.bind("<Return>", self.update_settings_event)
-        self.t_bag_delay_spinbox.bind("<FocusOut>", self.update_settings_event)
-
-        self.version_label = customtkinter.CTkLabel(scroll_frame, text="", font=FONT_BODY, text_color="gray50")
-        self.version_label.grid(row=3, column=0, columnspan=2, pady=(20, 10))
-        
-        self.hotkey_capture_mode = False
-        self.current_hotkey_field = None
-
-    def update_ui_text(self):
-        self.title(self._("settings"))
-        self.general_label.configure(text=self._("general"))
-        self.language_label.configure(text=self._("language"))
-        
-        for key, label in self.settings_labels.items():
-            label.configure(text=self._(key))
-
-        self.hotkeys_label.configure(text=self._("hotkeys"))
-        for key, label in self.hotkey_items_labels.items():
-            label.configure(text=self._(key))
-        for _, button in self.hotkey_record_buttons.items():
-            button.configure(text=self._("record"))
-
-        self.tbag_label.configure(text=self._("tbag_macro"))
-        self.tbag_activation_label.configure(text=self._("activation_hotkey"))
-        self.tbag_action_key_label.configure(text=self._("action_key"))
-        self.tbag_delay_label.configure(text=self._("delay_s"))
-        self.tbag_hotkey_record_button.configure(text=self._("record"))
-        self.tbag_key_record_button.configure(text=self._("record"))
-
-        self.version_label.configure(text=self._("version_info", __version__=__version__))
-        
-    def update_settings(self):
+    def set_window(self, window):
+        print("Setting window for API")
+        self._window = window
+        # Passa a referência da janela para o controlador de recoil
+        self.recoil_controller._window = window
+        print("Window set for API")
+        # Controller bridge removed
+    
+    # Window control methods for custom titlebar
+    def minimize(self):
         try:
-            self.recoil_controller.settings.shoot_delay = float(self.shoot_delay_spinbox.get())
-            self.recoil_controller.settings.max_shots = int(self.max_shots_spinbox.get())
-            self.recoil_controller.settings.t_bag_delay = float(self.t_bag_delay_spinbox.get())
-        except ValueError:
-            logging.error("Invalid input values for settings. Please enter valid numbers.")
+            if self._window:
+                self._window.minimize()
+        except Exception as e:
+            print(f"Minimize error: {e}")
 
-    def on_language_change(self, choice):
-        language_code = "pt" if choice == "Português" else "en"
-        self.recoil_controller.settings.language = language_code
-        self.main_app_instance.save_settings()
-        self.main_app_instance.update_ui_language()
-        self.update_ui_text()
+    def toggle_maximize(self):
+        try:
+            if self._window:
+                # Try native maximize if available, else fallback to fullscreen toggle
+                if hasattr(self._window, 'maximize'):
+                    self._window.maximize()
+                else:
+                    self._window.toggle_fullscreen()
+        except Exception as e:
+            print(f"Maximize error: {e}")
 
-    def start_hotkey_capture(self, input_field, setting_key):
-        self.current_hotkey_field = input_field
-        self.setting_key_to_update = setting_key
-        self.hotkey_capture_mode = True
-        
-        if self.current_hotkey_field is not None:
-            self.current_hotkey_field.configure(state="normal")
-            self.current_hotkey_field.delete(0, tk.END)
-            self.current_hotkey_field.insert(0, self._("press_key_prompt"))
-            self.current_hotkey_field.configure(state="readonly")
+    def close_window(self):
+        try:
+            if self._window:
+                self._window.destroy()
+        except Exception as e:
+            print(f"Close error: {e}")
 
-    def stop_hotkey_capture(self, hotkey_string):
-        if self.hotkey_capture_mode:
-            self.hotkey_capture_mode = False
-            if self.current_hotkey_field is not None:
-                self.current_hotkey_field.configure(state="normal")
-                self.current_hotkey_field.delete(0, tk.END)
-                self.current_hotkey_field.insert(0, hotkey_string)
-                self.current_hotkey_field.configure(state="readonly")
-            
-            if self.setting_key_to_update == "t_bag_key":
-                 setattr(self.recoil_controller.settings, self.setting_key_to_update, hotkey_string)
+    def load_settings(self):
+        # Load persisted settings using SettingsManager and apply to runtime settings object
+        loaded = settings_manager.read_settings_file()
+        try:
+            if loaded:
+                # Apply persisted values to recoil_controller.settings (set attributes even if not pre-defined)
+                for k, v in loaded.items():
+                    try:
+                        setattr(self.recoil_controller.settings, k, v)
+                    except Exception:
+                        pass
+                print("Settings loaded successfully.")
+        except Exception as e:
+            print(f"Error applying loaded settings: {e}")
+
+        # Ensure a unique identifier exists for online presence, regardless of login status.
+        if not getattr(self.recoil_controller.settings, 'identificador', None):
+            import uuid
+            new_id = str(uuid.uuid4())
+            print(f"Identifier not found. Generating new one: {new_id}")
+            setattr(self.recoil_controller.settings, 'identificador', new_id)
+            # Save settings immediately to persist the new ID
+            self.save_settings()
+
+    def save_settings(self):
+        # Use SettingsManager.update_settings to persist only allowed keys
+        try:
+            if hasattr(self.recoil_controller.settings, 'to_dict'):
+                data = self.recoil_controller.settings.to_dict()
             else:
-                setattr(self.recoil_controller.settings, self.setting_key_to_update, [hotkey_string])
+                data = dict(getattr(self.recoil_controller.settings, '__dict__', {}))
 
-        if self.setting_key_to_update in ["primary_weapon_hotkey", "secondary_weapon_hotkey", "primary_weapon_hotkey_2", "secondary_weapon_hotkey_2", "t_bag_hotkey", "t_bag_key"]:
-            self.main_app_instance.update_main_ui_recoil_values()
-            self.main_app_instance.save_settings()
-        print(f"[DEBUG] Hotkey capture for {self.setting_key_to_update} finished with: {hotkey_string}")
+            # Only send allowed keys to the manager
+            to_persist = {k: v for k, v in data.items() if k in settings_manager.allowed_keys}
+            updated = settings_manager.update_settings(to_persist)
+            print("Settings saved successfully via SettingsManager.")
+            return updated
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+            return None
 
-    def process_captured_key(self, key_or_mouse_hotkey_string):
-        if hasattr(key_or_mouse_hotkey_string, 'char') or str(key_or_mouse_hotkey_string).startswith('Key.'):
-            hotkey_string = self.main_app_instance._get_key_string(key_or_mouse_hotkey_string)
+    def toggle_recoil(self):
+        """Toggles the recoil control on and off."""
+        self._recoil_active = not self._recoil_active
+        if self._recoil_active:
+            print("Iniciando sistema de recoil...")
+            self.recoil_controller.start()
+            print("Recoil control ENABLED.")
         else:
-            hotkey_string = key_or_mouse_hotkey_string
+            print("Parando sistema de recoil...")
+            self.recoil_controller.stop()
+            print("Recoil control DISABLED.")
+        return {"isActive": self._recoil_active}
+
+    def is_recoil_active(self):
+        """Returns the current state of recoil control (exposed to JS)."""
+        return self._recoil_active
+
+    def toggle_overlay(self):
+        """Toggles the overlay window."""
+        if self.overlay_window:
+            self.overlay_window.destroy()
+            self.overlay_window = None
+            self.recoil_controller.settings.overlay_enabled = False
+            self.save_settings()
+            if self._window:
+                self._window.evaluate_js(f'updateOverlayButtonState(false)')
+            return {"isActive": False}
+        else:
+            self.recoil_controller.settings.overlay_enabled = True
+            self.save_settings()
+            self.overlay_window = webview.create_window(
+                'Overlay',
+                'http://localhost:8077/overlay.html',
+                frameless=True,
+                on_top=True,
+                width=500,
+                height=50,
+                transparent=True,  # Important for layered windows
+                easy_drag=False
+            )
+
+            def on_loaded():
+                def apply_styles_and_position():
+                    try:
+                        # Use FindWindowW to get the handle by title
+                        hwnd = win32gui.FindWindow(None, 'Overlay')
+                        if not hwnd:
+                            # print("Could not find overlay window handle for styling.")
+                            return False # Indicate failure to retry
+                        
+                        # Define constants
+                        GWL_EXSTYLE = -20
+                        WS_EX_TRANSPARENT = 0x00000020
+                        WS_EX_LAYERED = 0x00080000
+                        WS_EX_NOACTIVATE = 0x08000000
+                        WS_EX_TOOLWINDOW = 0x00000080
+                        LWA_ALPHA = 0x00000002
+
+                        # Get current style and apply new styles
+                        ex_style = win32gui.GetWindowLong(hwnd, GWL_EXSTYLE)
+                        ex_style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+                        win32gui.SetWindowLong(hwnd, GWL_EXSTYLE, ex_style)
+                        
+                        # Set window as layered but fully opaque
+                        win32gui.SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)
+
+                        # Reposition the window to the bottom right
+                        rect = win32gui.GetWindowRect(hwnd)
+                        width = rect[2] - rect[0]
+                        height = rect[3] - rect[1]
+                        screen_width = win32api.GetSystemMetrics(0)
+                        screen_height = win32api.GetSystemMetrics(1)
+                        x = screen_width - width - 10
+                        y = screen_height - height - 5
+                        win32gui.MoveWindow(hwnd, x, y, width, height, True)
+                        
+                        print("Applied click-through styles and repositioned overlay using new method.")
+                        return True # Indicate success
+                    except Exception as e:
+                        print(f"Error in apply_styles_and_position thread: {e}")
+                        return False # Indicate failure
+
+                # Use a loop with a delay to robustly apply styles
+                def robust_apply():
+                    import time
+                    for _ in range(20): # Try for 1 second
+                        if apply_styles_and_position():
+                            break
+                        time.sleep(0.05)
+                
+                threading.Thread(target=robust_apply).start()
+
+            self.overlay_window.events.loaded += on_loaded
+
+            if self._window:
+                self._window.evaluate_js(f'updateOverlayButtonState(true)')
+            return {"isActive": True}
+
+    
+
+    def is_overlay_active(self):
+        """Returns the current state of the overlay window."""
+        return self.overlay_window is not None
+
+    def get_settings(self):
+        """Returns the current settings as a dictionary (sanitized for UI)."""
+        data = settings_manager.to_ui_dict(self.recoil_controller.settings)
+        data['app_version'] = __version__
+        return data
+
+    def apply_settings(self, settings_dict):
+        """Applies a dictionary of settings and saves them."""
+        try:
+            # Map UI keys to internal keys if needed
+            resolved = dict(settings_dict)
+            # Normalize DPI/Sensitivity into the settings object even if the attributes don't pre-exist
+            if 'setting_dpi' in resolved:
+                try:
+                    dpi_val = int(resolved.get('setting_dpi'))
+                except Exception:
+                    dpi_val = resolved.get('setting_dpi')
+                # store under multiple keys so other parts of the app can read them
+                try:
+                    setattr(self.recoil_controller.settings, 'dpi', dpi_val)
+                except Exception:
+                    pass
+                try:
+                    setattr(self.recoil_controller.settings, 'mouse_dpi', dpi_val)
+                except Exception:
+                    pass
+                try:
+                    setattr(self.recoil_controller.settings, 'setting_dpi', dpi_val)
+                except Exception:
+                    pass
+                # also ensure resolved contains a canonical key
+                resolved['dpi'] = dpi_val
+
+            if 'setting_sens' in resolved:
+                try:
+                    sens_val = float(resolved.get('setting_sens'))
+                except Exception:
+                    sens_val = resolved.get('setting_sens')
+                try:
+                    setattr(self.recoil_controller.settings, 'sens', sens_val)
+                except Exception:
+                    pass
+                try:
+                    setattr(self.recoil_controller.settings, 'sensitivity', sens_val)
+                except Exception:
+                    pass
+                try:
+                    setattr(self.recoil_controller.settings, 'setting_sens', sens_val)
+                except Exception:
+                    pass
+                resolved['sens'] = sens_val
+
+            # Handle overlay/zoom settings
+            if 'overlay_zoom_level' in resolved:
+                try:
+                    zoom_val = float(resolved.get('overlay_zoom_level'))
+                    setattr(self.recoil_controller.settings, 'overlay_zoom_level', zoom_val)
+                    setattr(self.recoil_controller.settings, 'zoom_level', zoom_val) # for compatibility
+                except (ValueError, TypeError):
+                    pass
+            elif 'zoom_level' in resolved: # fallback for old key
+                 try:
+                    zoom_val = float(resolved.get('zoom_level'))
+                    setattr(self.recoil_controller.settings, 'overlay_zoom_level', zoom_val)
+                    setattr(self.recoil_controller.settings, 'zoom_level', zoom_val)
+                 except (ValueError, TypeError):
+                    pass
+
+            if 'overlay_enabled' in resolved:
+                setattr(self.recoil_controller.settings, 'overlay_enabled', resolved['overlay_enabled'])
+                setattr(self.recoil_controller.settings, 'zoom_hack_enabled', resolved['overlay_enabled']) # for compatibility
+            elif 'zoom_hack_enabled' in resolved: # fallback for old key
+                setattr(self.recoil_controller.settings, 'overlay_enabled', resolved['zoom_hack_enabled'])
+                setattr(self.recoil_controller.settings, 'zoom_hack_enabled', resolved['zoom_hack_enabled'])
+
+
+            for key, value in resolved.items():
+                if hasattr(self.recoil_controller.settings, key):
+                    setattr(self.recoil_controller.settings, key, value)
             
+            # After applying, update the controller with the new values
+            if self.recoil_controller.settings.active_weapon == "primary":
+                self.recoil_controller.set_recoil_y(self.recoil_controller.settings.primary_recoil_y)
+                self.recoil_controller.set_recoil_x(self.recoil_controller.settings.primary_recoil_x)
+            else:
+                self.recoil_controller.set_recoil_y(self.recoil_controller.settings.secondary_recoil_y)
+                self.recoil_controller.set_recoil_x(self.recoil_controller.settings.secondary_recoil_x)
+
+            
+
+            # Handle crosshair functionality
+            if hasattr(self.recoil_controller.settings, 'crosshair_enabled'):
+                if self.recoil_controller.settings.crosshair_enabled:
+                    self.recoil_controller.start_crosshair()
+                else:
+                    self.recoil_controller.stop_crosshair()
+
+            self.save_settings() # Save settings after applying
+            print("Settings applied successfully.")
+            return {"success": True}
+        except Exception as e:
+            print(f"Error applying settings: {e}")
+            return {"success": False, "error": str(e)}
+
+    def log_message(self, message):
+        """Logs a message from the UI to the console."""
+        print(f"[UI Log]: {message}")
+
+    def start_listeners(self):
+        if not self.keyboard_listener or not self.keyboard_listener.is_alive():
+            self.keyboard_listener = keyboard.Listener(on_press=self._on_key_press, on_release=self._on_key_release)
+            self.keyboard_listener.start()
+            print("Keyboard listener started.")
+        
+        if not self.mouse_listener or not self.mouse_listener.is_alive():
+            self.mouse_listener = mouse.Listener(on_click=self._on_mouse_click, on_scroll=self._on_scroll_event)
+            self.mouse_listener.start()
+            print("Mouse listener started.")
+
+    def stop_listeners(self):
+        if self.keyboard_listener and self.keyboard_listener.is_alive():
+            self.keyboard_listener.stop()
+            self.keyboard_listener.join()
+            print("Keyboard listener stopped.")
+        
+        if self.mouse_listener and self.mouse_listener.is_alive():
+            self.mouse_listener.stop()
+            self.mouse_listener.join()
+            print("Mouse listener stopped.")
+        # Controller bridge removed
+
+    def _get_hotkey_string(self, key):
+        """Converts a pynput key object to a string representation used in settings."""
+        try:
+            # For special keys like Key.f1, Key.shift
+            if hasattr(key, 'vk'):
+                # Use win32api to get the key name if it's a virtual key code
+                # This handles cases where pynput's name might be different from our KEY_MAP
+                import win32api
+                vk_code = key.vk
+                if vk_code in KEY_MAP:
+                    return KEY_MAP[vk_code]
+                else:
+                    # Fallback for other VK codes not in our map
+                    return f"VK_{vk_code}"
+            elif hasattr(key, 'char') and key.char is not None:
+                return str(key.char).upper()
+            else:
+                return str(key).replace('Key.', '').upper()
+        except Exception as e:
+            print(f"Error getting hotkey string: {e}")
+            return "UNKNOWN_KEY"
+
+    def _on_key_press(self, key):
+        hotkey_string = self._get_hotkey_string(key)
+        self._process_hotkey(hotkey_string)
+
+    def _on_key_release(self, key):
+        hotkey_string = self._get_hotkey_string(key)
+        if hotkey_string in self.recoil_controller.settings.t_bag_hotkey:
+            if self.recoil_controller.settings.t_bag_enabled and self.recoil_controller.t_bag_active:
+                self.recoil_controller.stop_t_bag()
+
+    def _on_mouse_click(self, x, y, button, pressed):
+        # This is handled by recoil_controller directly, but we can add UI updates here if needed
+        pass
+
+    def _on_scroll_event(self, x, y, dx, dy):
+        hotkey_string = ""
+        if dy > 0:
+            hotkey_string = "SCROLL_UP"
+        elif dy < 0:
+            hotkey_string = "SCROLL_DOWN"
+        
         if hotkey_string:
-            self.stop_hotkey_capture(hotkey_string)
-            print(f"[DEBUG] Hotkey captured in dialog: {hotkey_string}")
+            self._process_hotkey(hotkey_string)
 
-    def update_settings_event(self, event=None):
-        self.update_settings()
-        self.main_app_instance.update_main_ui_recoil_values()
-        self.main_app_instance.save_settings()
+    def toggle_overlay_hotkey(self):
+        """Handles the overlay toggle hotkey press."""
+        self.recoil_controller.settings.overlay_enabled = not getattr(self.recoil_controller.settings, 'overlay_enabled', False)
+        self.save_settings() # Just save, don't re-apply everything
+        if self._window:
+            # We still need to tell the UI about the main toggle button state
+            self._window.evaluate_js(f'updateOverlayButtonState({json.dumps(self.recoil_controller.settings.overlay_enabled)});')
+            # And update the settings view in case it's open
+            self._window.evaluate_js(f'updateUIFromPython({json.dumps(self.get_settings())});')
 
+    def update_overlay_agents(self, agents):
+        self.overlay_agents = agents  # Store the agents
+        if self.overlay_window:
+            self.overlay_window.evaluate_js(f'window.update_agents({json.dumps(agents)})')
 
-class PresetsDialog(customtkinter.CTkToplevel):
-    def __init__(self, recoil_controller, main_app_instance, icon_cache, parent=None):
-        super().__init__(parent)
-        self.recoil_controller = recoil_controller
-        self.main_app_instance = main_app_instance
-        self.icon_cache = icon_cache
-        center_window(self, 800, 600)
-        self.configure(fg_color=COLOR_BACKGROUND)
-
-        self.current_page_attackers = 0
-        self.current_page_defenders = 0
-        self.items_per_page = 18
-
-        self.init_ui()
-        self.update_ui_text()
-
-    def _(self, key, **kwargs):
-        return self.main_app_instance._(key, **kwargs)
-
-    def update_ui_text(self):
-        self.title(self._("agent_presets"))
-        self.tabview.configure(segmented_button_fg_color=COLOR_FRAME)
+    def step_overlay_square_hotkey(self):
+        """Handles the overlay step square hotkey press. Cycles through non-empty squares."""
         
-        self.tabview._segmented_button._buttons_dict["Attackers"].configure(text=self._("attackers"))
-        self.tabview._segmented_button._buttons_dict["Defenders"].configure(text=self._("defenders"))
+        # 1. Find indices of squares with agents
+        agent_indices = [i for i, agent in enumerate(self.overlay_agents) if agent and agent.get('name')]
 
-        self.attackers_prev_button.configure(text=self._("previous"))
-        self.attackers_next_button.configure(text=self._("next"))
-        self.defenders_prev_button.configure(text=self._("previous"))
-        self.defenders_next_button.configure(text=self._("next"))
-        
-        self.show_page("attackers")
-        self.show_page("defenders")
+        # 2. If no agents, do nothing
+        if not agent_indices:
+            print("No agents in overlay to step through.")
+            return
 
-    def init_ui(self):
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        # 3. Find the next index
+        try:
+            # Find where the current index is in our list of valid agent indices
+            current_list_index = agent_indices.index(self.current_overlay_square_index)
+            # Move to the next index in the list, wrapping around
+            next_list_index = (current_list_index + 1) % len(agent_indices)
+        except ValueError:
+            # If the current index isn't in the list (e.g., it's -1 or an empty square was selected before),
+            # just start from the first agent in the list.
+            next_list_index = 0
 
-        self.tabview = customtkinter.CTkTabview(self, fg_color=COLOR_FRAME)
-        self.tabview.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
+        # 4. Get the new actual square index
+        new_square_index = agent_indices[next_list_index]
+        self.current_overlay_square_index = new_square_index
 
-        self.attackers_tab = self.tabview.add("Attackers") 
-        self.defenders_tab = self.tabview.add("Defenders")
+        # 5. Highlight and load preset (the rest of the logic)
+        if self.overlay_window:
+            self.overlay_window.evaluate_js(f'window.highlight_square({self.current_overlay_square_index})')
 
-        self.attackers_tab.configure(fg_color=COLOR_BACKGROUND)
-        self.defenders_tab.configure(fg_color=COLOR_BACKGROUND)
+        agent_info = self.overlay_agents[self.current_overlay_square_index]
+        agent_name = agent_info['name']
+        print(f"Stepped to agent: {agent_name}")
 
-        self.setup_agent_tab(self.attackers_tab, "attackers")
-        self.setup_agent_tab(self.defenders_tab, "defenders")
-
-    def setup_agent_tab(self, tab, agent_type):
-        tab.grid_columnconfigure(0, weight=1)
-        tab.grid_rowconfigure(0, weight=1)
-
-        agents_grid_frame = customtkinter.CTkScrollableFrame(tab, fg_color=COLOR_BACKGROUND)
-        agents_grid_frame.grid(row=0, column=0, columnspan=3, padx=5, pady=5, sticky="nsew")
-        agents_grid_frame.grid_columnconfigure(tuple(range(6)), weight=1)
-        
-        nav_frame = customtkinter.CTkFrame(tab, fg_color=COLOR_BACKGROUND)
-        nav_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
-        nav_frame.grid_columnconfigure(1, weight=1)
-
-        prev_button = customtkinter.CTkButton(nav_frame, text="", font=FONT_BUTTON, fg_color=COLOR_FRAME, hover_color=COLOR_ACCENT, command=lambda: self.change_page(agent_type, -1))
-        prev_button.grid(row=0, column=0, padx=10, pady=5)
-        
-        page_label = customtkinter.CTkLabel(nav_frame, text="", font=FONT_BODY)
-        page_label.grid(row=0, column=1, padx=10, pady=5)
-
-        next_button = customtkinter.CTkButton(nav_frame, text="", font=FONT_BUTTON, fg_color=COLOR_FRAME, hover_color=COLOR_ACCENT, command=lambda: self.change_page(agent_type, 1))
-        next_button.grid(row=0, column=2, padx=10, pady=5)
-
-        if agent_type == "attackers":
-            self.attackers_agents = self.get_agent_list("attackers")
-            self.attackers_grid = agents_grid_frame
-            self.attackers_page_label = page_label
-            self.attackers_prev_button = prev_button
-            self.attackers_next_button = next_button
-            self.total_pages_attackers = self._calculate_total_pages(self.attackers_agents)
-            self.show_page("attackers")
+        presets = self.get_presets_for_agent(agent_name)
+        if presets and len(presets) > 0:
+            preset_to_load = presets[0]
+            print(f"Loading preset '{preset_to_load}' for agent '{agent_name}'")
+            self.load_preset(agent_name, preset_to_load)
         else:
-            self.defenders_agents = self.get_agent_list("defenders")
-            self.defenders_grid = agents_grid_frame
-            self.defenders_page_label = page_label
-            self.defenders_prev_button = prev_button
-            self.defenders_next_button = next_button
-            self.total_pages_defenders = self._calculate_total_pages(self.defenders_agents)
-            self.show_page("defenders")
-            
-    def _calculate_total_pages(self, agent_list):
-        num_agents = len(agent_list)
-        if num_agents == 0:
-            return 0
-            
-        total_pages = (num_agents + self.items_per_page - 1) // self.items_per_page
-        
-        rem = num_agents % self.items_per_page
-        if rem > 0 and rem <= 2 and total_pages > 1:
-            total_pages -= 1
-            
-        return total_pages
+            print(f"No presets found for agent '{agent_name}'")
 
+    def _process_hotkey(self, hotkey_string):
+        print(f"Processing hotkey: {hotkey_string}")
+
+        # Toggle Recoil hotkey
+        if hasattr(self.recoil_controller.settings, 'toggle_hotkey') and hotkey_string in self.recoil_controller.settings.toggle_hotkey:
+            self.toggle_recoil()
+            if self._window:
+                self._window.evaluate_js(f'updateToggleButtonState({json.dumps(self.is_recoil_active())});')
+            return
+
+        # Overlay Toggle hotkey
+        if hasattr(self.recoil_controller.settings, 'overlay_toggle_hotkey') and hotkey_string in self.recoil_controller.settings.overlay_toggle_hotkey:
+            self.toggle_overlay_hotkey()
+            return
+
+        # Overlay Step hotkey
+        if hasattr(self.recoil_controller.settings, 'overlay_step_hotkey') and hotkey_string in self.recoil_controller.settings.overlay_step_hotkey:
+            self.step_overlay_square_hotkey()
+            return
+
+        # T-Bag hotkey (should work even if recoil is disabled)
+        if hasattr(self.recoil_controller.settings, 't_bag_hotkey') and hotkey_string in self.recoil_controller.settings.t_bag_hotkey:
+            if self.recoil_controller.settings.t_bag_enabled:
+                if not self.recoil_controller.t_bag_active:
+                    self.recoil_controller.start_t_bag()
+
+        if not self._recoil_active:
+            return
+
+        # Primary Weapon hotkey
+        if hasattr(self.recoil_controller.settings, 'primary_weapon_hotkey') and (hotkey_string in self.recoil_controller.settings.primary_weapon_hotkey or hotkey_string in self.recoil_controller.settings.primary_weapon_hotkey_2):
+            self.recoil_controller.settings.active_weapon = "primary"
+            self.recoil_controller.set_recoil_y(self.recoil_controller.settings.primary_recoil_y)
+            self.recoil_controller.set_recoil_x(self.recoil_controller.settings.primary_recoil_x)
+            self.save_settings()
+            if self._window:
+                self._window.evaluate_js(f'updateUIFromPython({json.dumps(self.get_settings())});')
+            print(f"Primary weapon activated by hotkey: {hotkey_string}.")
+
+        # Secondary Weapon hotkey
+        elif hasattr(self.recoil_controller.settings, 'secondary_weapon_hotkey') and (hotkey_string in self.recoil_controller.settings.secondary_weapon_hotkey or \
+             hotkey_string in self.recoil_controller.settings.secondary_weapon_hotkey_2):
+            self.recoil_controller.settings.active_weapon = "secondary"
+            self.recoil_controller.set_recoil_y(self.recoil_controller.settings.secondary_recoil_y)
+            self.recoil_controller.set_recoil_x(self.recoil_controller.settings.secondary_recoil_x)
+            self.save_settings()
+            if self._window:
+                self._window.evaluate_js(f'updateUIFromPython({json.dumps(self.get_settings())});')
+            print(f"Secondary weapon activated by hotkey: {hotkey_string}.")
+
+    # Controller bridge fully removed
+
+    # --- Agents & Presets API (exposed to JS) ---
     def get_agent_list(self, agent_type):
+        """Returns a list of agents (name and image path) for the given type."""
+        agent_names = []
+        agent_dir_type = agent_type
+
         if agent_type == "attackers":
-            return [
+            agent_names = [
                 "Striker", "Sledge", "Thatcher", "Ash", "Thermite", "Twitch",
                 "Montagne", "Glaz", "Fuze", "Blitz", "IQ", "Buck",
                 "Blackbeard", "Capitao", "Hibana", "Jackal", "Ying", "Zofia",
@@ -596,7 +573,7 @@ class PresetsDialog(customtkinter.CTkToplevel):
                 "Deimos", "Rauora"
             ]
         elif agent_type == "defenders":
-            return [
+            agent_names = [
                 "Sentry", "Smoke", "Mute", "Castle", "Pulse", "Doc",
                 "Rook", "Kapkan", "Tachanka", "Jager", "Bandit", "Frost",
                 "Valkyrie", "Caveira", "Echo", "Mira", "Lesion", "Ela",
@@ -605,1317 +582,911 @@ class PresetsDialog(customtkinter.CTkToplevel):
                 "Thunderbird", "Thorn", "Azami", "Solis", "Fenrir",
                 "Tubarao", "Skopos"
             ]
-        return []
+        elif agent_type == "saved":
+            presets_base_dir = os.path.join(CONFIG_DIR, "presets")
+            if os.path.exists(presets_base_dir):
+                for agent_folder in os.listdir(presets_base_dir):
+                    agent_path = os.path.join(presets_base_dir, agent_folder)
+                    if os.path.isdir(agent_path):
+                        # Check if there is at least one .json file
+                        has_presets = any(f.endswith('.json') for f in os.listdir(agent_path))
+                        if has_presets:
+                            # Convert folder name (e.g., 'the_huntress') to display name ('The Huntress')
+                            agent_name = agent_folder.replace('_', ' ').title()
+                            agent_names.append(agent_name)
+            # For saved agents, we don't have a single type, so we'll have to find their images
+            agent_dir_type = None # Will check both attackers and defenders
 
-    def change_page(self, agent_type, direction):
-        if agent_type == "attackers":
-            self.current_page_attackers += direction
-            self.show_page("attackers")
-        else:
-            self.current_page_defenders += direction
-            self.show_page("defenders")
+        agents_data = []
+        # Determine search paths for images
+        search_paths = []
+        if agent_dir_type:
+            search_paths.append(os.path.join(get_base_path(), "webview_ui", "Agents", agent_dir_type))
+        else: # For 'saved', check both directories
+            search_paths.append(os.path.join(get_base_path(), "webview_ui", "Agents", "attackers"))
+            search_paths.append(os.path.join(get_base_path(), "webview_ui", "Agents", "defenders"))
 
-    def show_page(self, agent_type):
-        if agent_type == "attackers":
-            current_page = self.current_page_attackers
-            total_pages = self.total_pages_attackers
-            agents = self.attackers_agents
-            grid = self.attackers_grid
-            page_label = self.attackers_page_label
-            prev_button = self.attackers_prev_button
-            next_button = self.attackers_next_button
-        else:
-            current_page = self.current_page_defenders
-            total_pages = self.total_pages_defenders
-            agents = self.defenders_agents
-            grid = self.defenders_grid
-            page_label = self.defenders_page_label
-            prev_button = self.defenders_prev_button
-            next_button = self.defenders_next_button
+        for name in agent_names:
+            img_filename = f"{name.lower().replace(' ', '')}.png"
+            found_image = False
+            for path in search_paths:
+                full_disk_path = os.path.join(path, img_filename)
+                if os.path.exists(full_disk_path):
+                    with open(full_disk_path, "rb") as image_file:
+                        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                    web_path = f"data:image/png;base64,{encoded_string}"
+                    agents_data.append({"name": name, "image": web_path})
+                    found_image = True
+                    break
+            if not found_image:
+                print(f"Warning: Agent image not found for saved agent: {name}")
+                agents_data.append({"name": name, "image": ""}) # Fallback
+        return agents_data
 
-        for widget in grid.winfo_children():
-            widget.destroy()
-
-        start_index = current_page * self.items_per_page
-        
-        is_last_page = (current_page == total_pages - 1)
-        if is_last_page:
-            agents_to_display = agents[start_index:]
-        else:
-            agents_to_display = agents[start_index : start_index + self.items_per_page]
-
-        row, col = 0, 0
-        for agent_name in agents_to_display:
-            base_path = os.path.join(script_dir, "Agents")
-            icon_path = os.path.join(base_path, agent_type, f"{agent_name.lower()}.png")
-            
-            icon = self.icon_cache.get(icon_path)
-            if icon:
-                agent_presets_dir = os.path.join(CONFIG_DIR, "presets", agent_name.lower().replace(" ", "_"))
-                has_presets = os.path.exists(agent_presets_dir) and any(f.endswith(".json") for f in os.listdir(agent_presets_dir))
-                
-                button_color = COLOR_ACCENT_DARK if has_presets else COLOR_FRAME
-
-                button = customtkinter.CTkButton(
-                    grid,
-                    image=icon,
-                    text=agent_name,
-                    compound="top",
-                    font=FONT_BODY,
-                    fg_color=button_color,
-                    hover_color=COLOR_ACCENT,
-                    command=lambda n=agent_name: self.select_agent(n)
-                )
-                button.grid(row=row, column=col, padx=5, pady=5)
-                col += 1
-                if col >= 6:
-                    col = 0
-                    row += 1
-
-        page_label.configure(text=self._("page_info", current_page=current_page + 1, total_pages=total_pages))
-        prev_button.configure(state="normal" if current_page > 0 else "disabled")
-        next_button.configure(state="normal" if current_page < total_pages - 1 else "disabled")
-
-    def select_agent(self, agent_name):
-        print(f"Agent selected: {agent_name}")
-        self.agent_preset_dialog = AgentPresetDialog(agent_name, self.recoil_controller, self.main_app_instance)
-        self.agent_preset_dialog.grab_set()
-        self.agent_preset_dialog.wait_window()
-
-
-class AgentPresetDialog(customtkinter.CTkToplevel):
-    def __init__(self, agent_name, recoil_controller, main_app_instance, parent=None):
-        super().__init__(parent)
-        self.agent_name = agent_name
-        self.recoil_controller = recoil_controller
-        self.main_app_instance = main_app_instance
-        center_window(self, 450, 300)
-        self.configure(fg_color=COLOR_BACKGROUND)
-        
-        self.title_font = FONT_SUBTITLE
-        
-        self.init_ui()
-        self.update_ui_text()
-
-    def _(self, key, **kwargs):
-        return self.main_app_instance._(key, **kwargs)
-
-    def update_ui_text(self):
-        self.title(self._("presets_for", agent_name=self.agent_name))
-        self.save_preset_label.configure(text=self._("save_preset"))
-        self.preset_name_input.configure(placeholder_text=self._("enter_preset_name"))
-        self.save_button.configure(text=self._("save"))
-        self.manage_existing_label.configure(text=self._("manage_existing"))
-        self.load_button.configure(text=self._("load"))
-        self.delete_button.configure(text=self._("delete"))
-        self.populate_presets_combobox()
-
-    def init_ui(self):
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure((0, 1), weight=0)
-        self.grid_rowconfigure(2, weight=1)
-        
-        save_frame = customtkinter.CTkFrame(self, fg_color=COLOR_FRAME, border_width=0)
-        save_frame.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
-        save_frame.grid_columnconfigure(0, weight=1)
-
-        self.save_preset_label = customtkinter.CTkLabel(save_frame, text="", font=self.title_font)
-        self.save_preset_label.grid(row=0, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="w")
-        
-        self.preset_name_input = customtkinter.CTkEntry(save_frame, placeholder_text="", font=FONT_BODY)
-        self.preset_name_input.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
-        
-        self.save_button = customtkinter.CTkButton(save_frame, text="", font=FONT_BUTTON, fg_color=COLOR_ACCENT, hover_color=COLOR_HOVER, command=lambda: self.main_app_instance._perform_save_preset(self.agent_name, self.preset_name_input.get().strip()))
-        self.save_button.grid(row=1, column=1, padx=(0, 10), pady=10)
-
-        manage_frame = customtkinter.CTkFrame(self, fg_color=COLOR_FRAME, border_width=0)
-        manage_frame.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
-        manage_frame.grid_columnconfigure(0, weight=1)
-
-        self.manage_existing_label = customtkinter.CTkLabel(manage_frame, text="", font=self.title_font)
-        self.manage_existing_label.grid(row=0, column=0, columnspan=3, padx=10, pady=(5, 10), sticky="w")
-
-        self.preset_combo_box = customtkinter.CTkOptionMenu(manage_frame, values=[""], font=FONT_BODY, fg_color=COLOR_FRAME, button_color=COLOR_ACCENT, button_hover_color=COLOR_HOVER, command=self.on_preset_selected)
-        self.preset_combo_box.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
-
-        self.load_button = customtkinter.CTkButton(manage_frame, text="", width=80, font=FONT_BUTTON, command=lambda: self.main_app_instance._perform_load_preset(self.agent_name, self.preset_combo_box.get()))
-        self.load_button.grid(row=1, column=1, padx=(5, 5), pady=10)
-
-        self.delete_button = customtkinter.CTkButton(manage_frame, text="", width=80, font=FONT_BUTTON, command=lambda: self.main_app_instance._perform_delete_preset(self.agent_name, self.preset_combo_box.get()), fg_color=COLOR_DANGER, hover_color="#C82333")
-        self.delete_button.grid(row=1, column=2, padx=(0, 10), pady=10)
-
-        self.populate_presets_combobox()
-
-    def on_preset_selected(self, choice):
-        self.preset_name_input.delete(0, tk.END)
-        if choice != self._("no_presets_found"):
-            self.preset_name_input.insert(0, choice)
-
-    def populate_presets_combobox(self):
-        agent_presets_dir = os.path.join(CONFIG_DIR, "presets", self.agent_name.lower().replace(" ", "_"))
+    def get_presets_for_agent(self, agent_name):
+        agent_presets_dir = os.path.join(CONFIG_DIR, "presets", agent_name.lower().replace(" ", "_"))
         presets = []
         if os.path.exists(agent_presets_dir):
             for filename in os.listdir(agent_presets_dir):
                 if filename.endswith(".json"):
                     preset_name = os.path.splitext(filename)[0]
                     presets.append(preset_name)
-        
-        if presets:
-            self.preset_combo_box.configure(values=presets)
-            self.preset_combo_box.set(presets[0])
-            self.load_button.configure(state="normal")
-            self.delete_button.configure(state="normal")
-        else:
-            self.preset_combo_box.configure(values=[self._("no_presets_found")])
-            self.preset_combo_box.set(self._("no_presets_found"))
-            self.load_button.configure(state="disabled")
-            self.delete_button.configure(state="disabled")
+        return presets
 
-    def load_preset(self):
-        selected_preset = self.preset_combo_box.get()
-        if selected_preset == self._("no_presets_found") or not selected_preset:
-            msg = CTkMessagebox(title=self._("warning"), message=self._("select_preset_to_load"), icon="warning")
-            msg.get()
-            return
-
-        msg = CTkMessagebox(title=self._("confirm_load_title"),
-                            message=self._("confirm_load_message", selected_preset=selected_preset),
-                            option_1="No", option_2="Yes", icon="question")
-        response = msg.get()
-        if response != "Yes":
-            return
-
-        agent_presets_dir = os.path.join(CONFIG_DIR, "presets", self.agent_name.lower().replace(" ", "_"))
-        preset_file_path = os.path.join(agent_presets_dir, f"{selected_preset}.json")
-
-        if not os.path.exists(preset_file_path):
-            msg = CTkMessagebox(title=self._("error"), message=self._("preset_not_found", preset_file_path=preset_file_path), icon="cancel")
-            msg.get()
-            return
-
+    def get_all_local_presets(self):
+        """Return all presets found under CONFIG_DIR/presets as a list of {agent, name} entries."""
+        all_presets = []
         try:
-            with open(preset_file_path, 'r') as f:
-                loaded_settings = json.load(f)
-
-            self.recoil_controller.settings.primary_recoil_y = loaded_settings.get("primary_recoil_y", 0.0)
-            self.recoil_controller.settings.primary_recoil_x = loaded_settings.get("primary_recoil_x", 0.0)
-            self.recoil_controller.settings.secondary_recoil_y = loaded_settings.get("secondary_recoil_y", 0.0)
-            self.recoil_controller.settings.secondary_recoil_x = loaded_settings.get("secondary_recoil_x", 0.0)
-            self.recoil_controller.settings.secondary_weapon_enabled = loaded_settings.get("secondary_weapon_enabled", False)
-
-            self.main_app_instance.update_main_ui_recoil_values()
-
-            msg = CTkMessagebox(title=self._("success"), message=self._("preset_loaded_successfully", selected_preset=selected_preset, agent_name=self.agent_name), icon="info")
-            msg.get()
-            self.destroy()
-        except Exception as e:
-            msg = CTkMessagebox(title=self._("error"), message=self._("error_loading_preset", e=e), icon="cancel")
-            msg.get()
-
-class ChatDialog(customtkinter.CTkToplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.parent = parent
-        self.recoil_controller = parent.recoil_controller
-        self.rate_limiter = parent.rate_limiter
-        self.chat_history_list = []
-        self.thinking_bubble = None
-
-        center_window(self, 500, 600)
-        self.configure(fg_color=COLOR_BACKGROUND)
-        self.title(self.parent._("chat_title"))
-
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
-
-        header_frame = customtkinter.CTkFrame(self, fg_color="transparent")
-        header_frame.grid(row=0, column=0, columnspan=2, padx=10, pady=(10, 0), sticky="ew")
-        header_frame.grid_columnconfigure(0, weight=1)
-        header_frame.grid_columnconfigure(1, weight=0)
-        header_frame.grid_columnconfigure(2, weight=1)
-
-        self.chat_title_label = customtkinter.CTkLabel(header_frame, text=self.parent._("chat_title"), font=FONT_SUBTITLE, text_color=COLOR_ACCENT)
-        self.chat_title_label.grid(row=0, column=1, padx=0, pady=0)
-
-        self.rate_limit_frame = customtkinter.CTkFrame(header_frame, fg_color="transparent")
-        self.rate_limit_frame.grid(row=0, column=2, padx=0, pady=0, sticky="ne")
-        self.rate_limit_frame.grid_columnconfigure(0, weight=1)
-
-        self.rpm_label = customtkinter.CTkLabel(self.rate_limit_frame, text="RPM 5/5", font=FONT_BODY, text_color="gray70")
-        self.rpm_label.pack(anchor="e")
-
-        self.rpd_label = customtkinter.CTkLabel(self.rate_limit_frame, text="RPD 100/100", font=FONT_BODY, text_color="gray70")
-        self.rpd_label.pack(anchor="e")
-
-        self.chat_history_frame = customtkinter.CTkScrollableFrame(self, fg_color=COLOR_FRAME, corner_radius=10)
-        self.chat_history_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="nsew")
-        self.chat_history_frame.grid_columnconfigure(0, weight=1)
-
-
-        input_frame = customtkinter.CTkFrame(self, fg_color="transparent")
-        input_frame.grid(row=2, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="ew")
-        input_frame.grid_columnconfigure(0, weight=1)
-
-        self.chat_input = customtkinter.CTkEntry(input_frame, placeholder_text=self.parent._("chat_input_placeholder"), font=FONT_BODY, corner_radius=10, fg_color=COLOR_FRAME, border_color=COLOR_ACCENT, border_width=1)
-        self.chat_input.grid(row=0, column=0, padx=(0, 10), sticky="ew")
-        self.chat_input.bind("<Return>", self.send_message_event)
-
-        self.send_button = customtkinter.CTkButton(input_frame, text=self.parent._("chat_send_button"), font=FONT_BUTTON, width=80, command=self.send_message, fg_color=COLOR_ACCENT, hover_color=COLOR_HOVER, corner_radius=10)
-        self.send_button.grid(row=0, column=1)
-        
-    def _update_rate_limit_display(self):
-        try:
-            response = requests.get(f"{NGROK_BASE_URL}/rate-limit-status")
-            response.raise_for_status()
-            data = response.json()
-            current_rpm_used = data.get("current_rpm", 0)
-            current_rpd_used = data.get("current_rpd", 0)
-
-            rpm_remaining = 5 - current_rpm_used
-            rpd_remaining = 100 - current_rpd_used
-
-            self.rpm_label.configure(text=f"RPM {rpm_remaining}/5")
-            self.rpd_label.configure(text=f"RPD {rpd_remaining}/100")
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Error fetching rate limit status: {e}")
-        finally:
-            pass
-
-    def send_message_event(self, event):
-        self.send_message()
-
-    def send_message(self):
-        user_prompt = self.chat_input.get().strip()
-        if not user_prompt:
-            return
-
-        self.add_message("You", user_prompt)
-        self.chat_input.delete(0, tk.END)
-
-        if user_prompt.lower() == "/report":
-            if not self.recoil_controller.settings.discord_user_id:
-                self.add_button_message(
-                    "RecoilAI",
-                    self.parent._("report_auth_required_message"),
-                    self.parent._("Authenticate with Discord"),
-                    self._handle_report_authentication
-                )
-                return
-            else:
-                self._send_report_to_server()
-                return
-
-        is_allowed, message = self.rate_limiter.check_request()
-        if not is_allowed:
-            self.add_message("RecoilAI", message)
-            return
-
-        self.send_button.configure(state="disabled")
-        self.add_message("RecoilAI", "Thinking...", is_thinking=True)
-
-        def _ai_request_thread():
-            try:
-                payload = {
-                    "prompt": user_prompt,
-                    "current_settings": self.recoil_controller.settings.to_dict(),
-                    "chat_history": self.chat_history_list,
-                    "discord_user_id": self.recoil_controller.settings.discord_user_id
-                }
-                response = requests.post(f"{NGROK_BASE_URL}/ai", json=payload)
-                response.raise_for_status()
-                ai_response = response.json()
-                self.after(0, self.parent.process_ai_response, ai_response, self)
-                self.after(0, self._update_rate_limit_display)
-            except Exception as e:
-                self.after(0, self.parent.process_ai_response, {"response_text": f"Error: {e}", "new_settings": None}, self)
-                self.after(0, self._update_rate_limit_display)
-
-        threading.Thread(target=_ai_request_thread, daemon=True).start()
-
-    def add_message(self, sender, message, is_thinking=False):
-        if self.thinking_bubble:
-            self.thinking_bubble.destroy()
-            self.thinking_bubble = None
-
-        if sender == "You":
-            pack_anchor = "e"
-            justify_align = "right"
-            bubble_color = COLOR_ACCENT
-            text_color = "white"
-        else:
-            pack_anchor = "w"
-            justify_align = "left"
-            bubble_color = "#3A3A3A"
-            text_color = COLOR_TEXT
-
-        bubble_container = customtkinter.CTkFrame(self.chat_history_frame, fg_color="transparent")
-        bubble_container.pack(fill="x", padx=5, pady=0)
-
-        bubble = customtkinter.CTkFrame(bubble_container, fg_color=bubble_color, corner_radius=15)
-        bubble.pack(anchor=pack_anchor, padx=10, pady=5, ipadx=5)
-
-        sender_label = customtkinter.CTkLabel(bubble, text=sender, font=(FONT_FAMILY, 11, "bold"), text_color=text_color, justify=justify_align)
-        sender_label.pack(anchor=pack_anchor, padx=15, pady=(10, 0), fill='x')
-
-        message_label = customtkinter.CTkLabel(bubble, text=message, font=FONT_BODY, text_color=text_color, wraplength=350, justify=justify_align)
-        message_label.pack(anchor=pack_anchor, expand=True, fill="x", padx=15, pady=(0, 10))
-
-        if is_thinking:
-            self.thinking_bubble = bubble_container
-
-        self.update_idletasks()
-        self.chat_history_frame._parent_canvas.yview_moveto(1.0)
-
-        if not is_thinking:
-            self.chat_history_list.append(f"{sender}: {message}")
-
-    def add_button_message(self, sender, message, button_text, button_command):
-        pack_anchor = "w"
-        justify_align = "left"
-        bubble_color = "#3A3A3A"
-        text_color = COLOR_TEXT
-
-        bubble_container = customtkinter.CTkFrame(self.chat_history_frame, fg_color="transparent")
-        bubble_container.pack(fill="x", padx=5, pady=0)
-
-        bubble = customtkinter.CTkFrame(bubble_container, fg_color=bubble_color, corner_radius=15)
-        bubble.pack(anchor=pack_anchor, padx=10, pady=5, ipadx=5)
-
-        sender_label = customtkinter.CTkLabel(bubble, text=sender, font=(FONT_FAMILY, 11, "bold"), text_color=text_color, justify=justify_align)
-        sender_label.pack(anchor=pack_anchor, padx=15, pady=(10, 0), fill='x')
-
-        message_label = customtkinter.CTkLabel(bubble, text=message, font=FONT_BODY, text_color=text_color, wraplength=350, justify=justify_align)
-        message_label.pack(anchor=pack_anchor, expand=True, fill="x", padx=15, pady=(0, 10))
-
-        action_button = customtkinter.CTkButton(bubble, text=button_text, font=FONT_BUTTON, command=button_command, fg_color=COLOR_ACCENT, hover_color=COLOR_HOVER)
-        action_button.pack(pady=(0, 10), padx=15)
-
-        self.update_idletasks()
-        self.chat_history_frame._parent_canvas.yview_moveto(1.0)
-
-        self.chat_history_list.append(f"{sender}: {message} [Button: {button_text}]")
-
-    def _send_report_to_server(self):
-        payload = {
-            "chat_history": self.chat_history_list,
-            "discord_user_id": self.recoil_controller.settings.discord_user_id
-        }
-        try:
-            response = requests.post(f"{NGROK_BASE_URL}/report", json=payload)
-            response.raise_for_status()
-            result = response.json()
-            self.add_message("RecoilAI", result.get("message", "Relatório enviado com sucesso!"))
-        except requests.exceptions.RequestException as e:
-            self.add_message("RecoilAI", f"Erro ao enviar relatório: {e}")
-
-    def _handle_report_authentication(self):
-        authenticated = self.parent._request_pin_and_authenticate()
-        if authenticated:
-            self._send_report_to_server()
-
-class PinInputDialog(customtkinter.CTkToplevel):
-    def __init__(self, parent, title, prompt):
-        super().__init__(parent)
-        self.parent = parent
-        self.title(title)
-        center_window(self, 300, 150)
-        self.configure(fg_color=COLOR_BACKGROUND)
-        self.grab_set()
-        self.focus_set()
-        self.transient(parent)
-
-        self.pin_value = None
-
-        self.label = customtkinter.CTkLabel(self, text=prompt, font=FONT_BODY)
-        self.label.pack(pady=10)
-
-        self.entry = customtkinter.CTkEntry(self, font=FONT_BODY, width=200)
-        self.entry.pack(pady=5)
-        self.entry.bind("<Return>", self._on_submit)
-
-        self.submit_button = customtkinter.CTkButton(self, text="Submit", command=self._on_submit, font=FONT_BUTTON)
-        self.submit_button.pack(pady=10)
-
-    def _on_submit(self, event=None):
-        self.pin_value = self.entry.get().strip()
-        self.destroy()
-
-    def get_input(self):
-        self.parent.wait_window(self)
-        return self.pin_value
-
-class AboutDialog(customtkinter.CTkToplevel):
-    def __init__(self, parent=None, recoil_controller=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.recoil_controller = recoil_controller
-        center_window(self, 400, 250)
-        self.configure(fg_color=COLOR_BACKGROUND)
-        self.update_idletasks()
-
-        self.grab_set()
-        self.focus_set()
-        self.transient(parent)
-
-        self.main_frame = customtkinter.CTkFrame(self, fg_color=COLOR_FRAME)
-        self.main_frame.pack(fill="both", expand=True, padx=20, pady=20)
-
-        self.title_label = customtkinter.CTkLabel(self.main_frame, text="", font=FONT_TITLE)
-        self.title_label.pack(pady=(0, 5))
-        self.version_label = customtkinter.CTkLabel(self.main_frame, text="", font=FONT_BODY, text_color="gray60")
-        self.version_label.pack(pady=(0, 15))
-
-        self.creator_label = customtkinter.CTkLabel(self.main_frame, text="", font=FONT_BODY)
-        self.creator_label.pack(pady=5)
-        
-        button_checkbox_frame = customtkinter.CTkFrame(self.main_frame, fg_color="transparent")
-        button_checkbox_frame.pack(pady=20, fill="x")
-        button_checkbox_frame.grid_columnconfigure(0, weight=1)
-
-        self.do_not_show_again_checkbox = customtkinter.CTkCheckBox(button_checkbox_frame, text="", font=FONT_BODY, command=self.toggle_show_on_startup)
-        if self.recoil_controller and not self.recoil_controller.settings.show_about_on_startup:
-            self.do_not_show_again_checkbox.select()
-        else:
-            self.do_not_show_again_checkbox.deselect()
-        self.do_not_show_again_checkbox.grid(row=0, column=0, sticky="w")
-
-        self.close_button = customtkinter.CTkButton(button_checkbox_frame, text="", font=FONT_BUTTON, command=self.destroy)
-        self.close_button.grid(row=0, column=1, sticky="e")
-        
-        self.update_ui_text()
-
-    def _(self, key, **kwargs):
-        if self.parent:
-            return self.parent._(key, **kwargs)
-        return key
-
-    def update_ui_text(self):
-        self.title(self._("about"))
-        self.title_label.configure(text=self._("app_title"))
-        self.version_label.configure(text=self._("version_info", __version__=__version__))
-        self.creator_label.configure(text=self._("created_by"))
-        self.do_not_show_again_checkbox.configure(text=self._("do_not_show_again"))
-        self.close_button.configure(text=self._("close"))
-
-    def toggle_show_on_startup(self):
-        if self.recoil_controller:
-            self.recoil_controller.settings.show_about_on_startup = not self.do_not_show_again_checkbox.get()
-            if self.parent:
-                self.parent.save_settings()
-
-class AboutDialog(customtkinter.CTkToplevel):
-    def __init__(self, parent=None, recoil_controller=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.recoil_controller = recoil_controller
-        center_window(self, 400, 250)
-        self.configure(fg_color=COLOR_BACKGROUND)
-        self.update_idletasks()
-
-        self.grab_set()
-        self.focus_set()
-        self.transient(parent)
-
-        self.main_frame = customtkinter.CTkFrame(self, fg_color=COLOR_FRAME)
-        self.main_frame.pack(fill="both", expand=True, padx=20, pady=20)
-
-        self.title_label = customtkinter.CTkLabel(self.main_frame, text="", font=FONT_TITLE)
-        self.title_label.pack(pady=(0, 5))
-        self.version_label = customtkinter.CTkLabel(self.main_frame, text="", font=FONT_BODY, text_color="gray60")
-        self.version_label.pack(pady=(0, 15))
-
-        self.creator_label = customtkinter.CTkLabel(self.main_frame, text="", font=FONT_BODY)
-        self.creator_label.pack(pady=5)
-        
-        button_checkbox_frame = customtkinter.CTkFrame(self.main_frame, fg_color="transparent")
-        button_checkbox_frame.pack(pady=20, fill="x")
-        button_checkbox_frame.grid_columnconfigure(0, weight=1)
-
-        self.do_not_show_again_checkbox = customtkinter.CTkCheckBox(button_checkbox_frame, text="", font=FONT_BODY, command=self.toggle_show_on_startup)
-        if self.recoil_controller and not self.recoil_controller.settings.show_about_on_startup:
-            self.do_not_show_again_checkbox.select()
-        else:
-            self.do_not_show_again_checkbox.deselect()
-        self.do_not_show_again_checkbox.grid(row=0, column=0, sticky="w")
-
-        self.close_button = customtkinter.CTkButton(button_checkbox_frame, text="", font=FONT_BUTTON, command=self.destroy)
-        self.close_button.grid(row=0, column=1, sticky="e")
-        
-        self.update_ui_text()
-
-    def _(self, key, **kwargs):
-        if self.parent:
-            return self.parent._(key, **kwargs)
-        return key
-
-    def update_ui_text(self):
-        self.title(self._("about"))
-        self.title_label.configure(text=self._("app_title"))
-        self.version_label.configure(text=self._("version_info", __version__=__version__))
-        self.creator_label.configure(text=self._("created_by"))
-        self.do_not_show_again_checkbox.configure(text=self._("do_not_show_again"))
-        self.close_button.configure(text=self._("close"))
-
-    def toggle_show_on_startup(self):
-        if self.recoil_controller:
-            self.recoil_controller.settings.show_about_on_startup = not self.do_not_show_again_checkbox.get()
-            if self.parent:
-                self.parent.save_settings()
-
-class RecoilControllerApp(customtkinter.CTk):
-    def __init__(self):
-        super().__init__()
-        self.recoil_controller = RecoilController()
-        self.rate_limiter = RateLimiter(rpm_limit=5, rpd_limit=200)
-        self.load_settings()
-        self.agent_icon_cache = {}
-
-        if self.recoil_controller.settings.show_about_on_startup:
-            self.about_dialog = AboutDialog(self, recoil_controller=self.recoil_controller)
-            self.about_dialog.wait_window()
-
-        self.overrideredirect(False)
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
-        
-        self.weapon_switcher = customtkinter.CTkSegmentedButton(
-            self,
-            values=[self._("primary"), self._("secondary")],
-            command=self._switch_weapon_view,
-            font=FONT_BUTTON,
-            selected_color=COLOR_ACCENT,
-            selected_hover_color=COLOR_HOVER
-        )
-        self.weapon_switcher.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
-        
-        self.recoil_frame = customtkinter.CTkFrame(self, fg_color="transparent")
-        self.recoil_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        self.recoil_frame.grid_columnconfigure(0, weight=1)
-        
-        self.create_recoil_widgets()
-
-        bottom_frame = customtkinter.CTkFrame(self, fg_color="transparent")
-        bottom_frame.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
-        bottom_frame.grid_columnconfigure(0, weight=1)
-        
-        self.t_bag_enabled_checkbox = customtkinter.CTkCheckBox(bottom_frame, text="", font=FONT_BODY, command=self.toggle_t_bag_enabled)
-        self.t_bag_enabled_checkbox.grid(row=0, column=0, columnspan=3, padx=5, pady=(5, 10), sticky="w")
-        self.t_bag_enabled_checkbox.select() if self.recoil_controller.settings.t_bag_enabled else self.t_bag_enabled_checkbox.deselect()
-
-        button_frame = customtkinter.CTkFrame(bottom_frame, fg_color="transparent")
-        button_frame.grid(row=1, column=0, sticky="ew")
-        button_frame.grid_columnconfigure((0, 1, 2), weight=1)
-
-        self.settings_button = customtkinter.CTkButton(button_frame, text="", font=FONT_BUTTON, command=self.open_settings)
-        self.settings_button.grid(row=0, column=0, padx=5, sticky="ew")
-
-        self.presets_button = customtkinter.CTkButton(button_frame, text="", font=FONT_BUTTON, command=self.open_presets_dialog)
-        self.presets_button.grid(row=0, column=1, padx=5, sticky="ew")
-
-        self.chat_button = customtkinter.CTkButton(button_frame, text="", font=FONT_BUTTON, command=self.open_chat)
-        self.chat_button.grid(row=0, column=2, padx=5, sticky="ew")
-
-        self.toggle_button = customtkinter.CTkButton(self, text="", command=self.toggle_recoil, height=40, font=FONT_TITLE)
-        self.toggle_button.grid(row=3, column=0, padx=20, pady=(5, 20), sticky="ew")
-        self.recoil_active = False
-
-        self.active_weapon = "primary"
-        self._switch_weapon_view("Primary")
-
-        self.update_main_ui_recoil_values()
-        self.update_ui_language()
-
-        self.keyboard_listener = keyboard.Listener(on_press=self._on_key_press, on_release=self._on_key_release)
-        self.keyboard_listener.start()
-
-        self.pynput_mouse_listener = mouse.Listener(on_click=self._on_mouse_click, on_scroll=self._on_scroll_event)
-        self.pynput_mouse_listener.start()
-        
-        threading.Thread(target=self._preload_agent_icons, daemon=True).start()
-
-    def _preload_agent_icons(self):
-        """Pre-loads agent icons into the cache on a background thread."""
-        agent_types = ["attackers", "defenders"]
-        for agent_type in agent_types:
-            base_path = os.path.join(script_dir, "Agents")
-            agent_path = os.path.join(base_path, agent_type)
-
-            if not os.path.exists(agent_path):
-                continue
-            
-            agent_files = os.listdir(agent_path)
-
-            for filename in agent_files:
-                if not filename.endswith(".png"):
+            base = os.path.join(CONFIG_DIR, 'presets')
+            if not os.path.exists(base):
+                return []
+            for agent_dir in os.listdir(base):
+                agent_path = os.path.join(base, agent_dir)
+                if not os.path.isdir(agent_path):
                     continue
-
-                icon_path = os.path.join(agent_path, filename)
-                if icon_path not in self.agent_icon_cache:
-                    try:
-                        img = Image.open(icon_path)
-                        icon = customtkinter.CTkImage(light_image=img, dark_image=img, size=(64, 64))
-                        self.agent_icon_cache[icon_path] = icon
-                        time.sleep(0.01)
-                    except Exception as e:
-                        print(f"Failed to pre-load icon {icon_path}: {e}")
-
-    def create_recoil_widgets(self):
-        self.recoil_y_label = customtkinter.CTkLabel(self.recoil_frame, text="", font=FONT_BODY)
-        self.recoil_y_label.grid(row=0, column=0, sticky="w", padx=10, pady=(10,0))
-        self.recoil_y_entry = customtkinter.CTkEntry(self.recoil_frame, width=80, font=FONT_BODY)
-        self.recoil_y_entry.grid(row=1, column=0, sticky="w", padx=10, pady=(0,5))
-        self.recoil_y_slider = customtkinter.CTkSlider(self.recoil_frame, from_=0, to=2000, number_of_steps=2000)
-        self.recoil_y_slider.grid(row=2, column=0, sticky="ew", padx=10, pady=(0,10))
-
-        self.recoil_x_label = customtkinter.CTkLabel(self.recoil_frame, text="", font=FONT_BODY)
-        self.recoil_x_label.grid(row=3, column=0, sticky="w", padx=10, pady=(5,0))
-        self.recoil_x_entry = customtkinter.CTkEntry(self.recoil_frame, width=80, font=FONT_BODY)
-        self.recoil_x_entry.grid(row=4, column=0, sticky="w", padx=10, pady=(0,5))
-        self.recoil_x_slider = customtkinter.CTkSlider(self.recoil_frame, from_=-5000, to=5000, number_of_steps=10000)
-        self.recoil_x_slider.grid(row=5, column=0, sticky="ew", padx=10, pady=(0,10))
-        
-        self.secondary_weapon_enabled_checkbox = customtkinter.CTkCheckBox(self.recoil_frame, text="", font=FONT_BODY, command=self.toggle_secondary_weapon_enabled)
-
-    def _switch_weapon_view(self, weapon_type_display):
-        if weapon_type_display == self._("primary"):
-            self.active_weapon = "primary"
-            self.recoil_controller.settings.active_weapon = "primary"
-        elif weapon_type_display == self._("secondary"):
-            self.active_weapon = "secondary"
-            self.recoil_controller.settings.active_weapon = "secondary"
-        else:
-            self.active_weapon = weapon_type_display.lower()
-        
-        self.recoil_y_entry.unbind("<Return>")
-        self.recoil_y_slider.configure(command=None)
-        self.recoil_x_entry.unbind("<Return>")
-        self.recoil_x_slider.configure(command=None)
-        
-        if self.active_weapon == "primary":
-            self.recoil_y_entry.bind("<Return>", self._update_primary_recoil_y_from_entry)
-            self.recoil_y_slider.configure(command=self._update_primary_recoil_y_from_slider_scaled)
-            self.recoil_x_entry.bind("<Return>", self._update_primary_recoil_x_from_entry)
-            self.recoil_x_slider.configure(command=self._update_primary_recoil_x_from_slider_scaled)
-            self.secondary_weapon_enabled_checkbox.grid_forget()
-        else:
-            self.recoil_y_entry.bind("<Return>", self._update_secondary_recoil_y_from_entry)
-            self.recoil_y_slider.configure(command=self._update_secondary_recoil_y_from_slider_scaled)
-            self.recoil_x_entry.bind("<Return>", self._update_secondary_recoil_x_from_entry)
-            self.recoil_x_slider.configure(command=self._update_secondary_recoil_x_from_slider_scaled)
-            self.secondary_weapon_enabled_checkbox.grid(row=6, column=0, padx=10, pady=15, sticky="w")
-            
-        self.update_main_ui_recoil_values()
-        
-    def update_toggle_button_color(self):
-        if self.recoil_active:
-            self.toggle_button.configure(text=self._("enabled"), fg_color=COLOR_SUCCESS, hover_color="#0B7A0D")
-        else:
-            self.toggle_button.configure(text=self._("disabled"), fg_color=COLOR_DANGER, hover_color="#C82333")
-
-    def toggle_t_bag_enabled(self):
-        is_checked = self.t_bag_enabled_checkbox.get() == 1
-        self.recoil_controller.settings.t_bag_enabled = is_checked
-        self.recoil_controller.logger.info(f"Enable T-bag Macro: {is_checked}")
-        self.save_settings()
-
-    def toggle_secondary_weapon_enabled(self):
-        is_checked = self.secondary_weapon_enabled_checkbox.get() == 1
-        self.recoil_controller.settings.secondary_weapon_enabled = is_checked
-        self.recoil_controller.logger.info(f"Enable Secondary Weapon: {is_checked}")
-        self.save_settings()
-
-    def _update_primary_recoil_y_from_slider_scaled(self, value):
-        scaled_value = value / 100.0
-        self.recoil_controller.settings.primary_recoil_y = scaled_value
-        self.recoil_y_entry.delete(0, tk.END)
-        self.recoil_y_entry.insert(0, f"{scaled_value:.2f}")
-        if self.active_weapon == "primary":
-            self.recoil_controller.set_recoil_y(scaled_value)
-        self.save_settings()
-
-    def _update_primary_recoil_x_from_slider_scaled(self, value):
-        scaled_value = value / 1000.0
-        self.recoil_controller.settings.primary_recoil_x = scaled_value
-        self.recoil_x_entry.delete(0, tk.END)
-        self.recoil_x_entry.insert(0, f"{scaled_value:.3f}")
-        if self.active_weapon == "primary":
-            self.recoil_controller.set_recoil_x(scaled_value)
-        self.save_settings()
-
-    def _update_secondary_recoil_y_from_slider_scaled(self, value):
-        scaled_value = value / 100.0
-        self.recoil_controller.settings.secondary_recoil_y = scaled_value
-        self.recoil_y_entry.delete(0, tk.END)
-        self.recoil_y_entry.insert(0, f"{scaled_value:.2f}")
-        if self.active_weapon == "secondary":
-            self.recoil_controller.set_recoil_y(scaled_value)
-        self.save_settings()
-
-    def _update_secondary_recoil_x_from_slider_scaled(self, value):
-        scaled_value = value / 1000.0
-        self.recoil_controller.settings.secondary_recoil_x = scaled_value
-        self.recoil_x_entry.delete(0, tk.END)
-        self.recoil_x_entry.insert(0, f"{scaled_value:.3f}")
-        if self.active_weapon == "secondary":
-            self.recoil_controller.set_recoil_x(scaled_value)
-        self.save_settings()
-
-    def _update_primary_recoil_y_from_entry(self, event):
-        try:
-            value = float(self.recoil_y_entry.get())
-            self.recoil_controller.settings.primary_recoil_y = value
-            self.recoil_y_slider.set(int(value * 100))
-            if self.active_weapon == "primary":
-                self.recoil_controller.set_recoil_y(value)
-            self.save_settings()
-        except ValueError:
-            CTkMessagebox(title="Error", message="Invalid value for Primary Recoil Y. Please enter a number.", icon="cancel").get()
-            self.recoil_y_entry.delete(0, tk.END)
-            self.recoil_y_entry.insert(0, f"{self.recoil_controller.settings.primary_recoil_y:.2f}")
-
-    def _update_primary_recoil_x_from_entry(self, event):
-        try:
-            value = float(self.recoil_x_entry.get())
-            self.recoil_controller.settings.primary_recoil_x = value
-            self.recoil_x_slider.set(int(value * 1000))
-            if self.active_weapon == "primary":
-                self.recoil_controller.set_recoil_x(value)
-            self.save_settings()
-        except ValueError:
-            CTkMessagebox(title="Error", message="Invalid value for Primary Recoil X. Please enter a number.", icon="cancel").get()
-            self.recoil_x_entry.delete(0, tk.END)
-            self.recoil_x_entry.insert(0, f"{self.recoil_controller.settings.primary_recoil_x:.3f}")
-
-    def _update_secondary_recoil_y_from_entry(self, event):
-        try:
-            value = float(self.recoil_y_entry.get())
-            self.recoil_controller.settings.secondary_recoil_y = value
-            self.recoil_y_slider.set(int(value * 100))
-            if self.active_weapon == "secondary":
-                self.recoil_controller.set_recoil_y(value)
-            self.save_settings()
-        except ValueError:
-            CTkMessagebox(title="Error", message="Invalid value for Secondary Recoil Y. Please enter a number.", icon="cancel").get()
-            self.recoil_y_entry.delete(0, tk.END)
-            self.recoil_y_entry.insert(0, f"{self.recoil_controller.settings.secondary_recoil_y:.2f}")
-
-    def _update_secondary_recoil_x_from_entry(self, event):
-        try:
-            value = float(self.recoil_x_entry.get())
-            self.recoil_controller.settings.secondary_recoil_x = value
-            self.recoil_x_slider.set(int(value * 1000))
-            if self.active_weapon == "secondary":
-                self.recoil_controller.set_recoil_x(value)
-            self.recoil_controller.set_recoil_x(value)
-            self.save_settings()
-        except ValueError:
-            CTkMessagebox(title="Error", message="Invalid value for Secondary Recoil X. Please enter a number.", icon="cancel").get()
-            self.recoil_x_entry.delete(0, tk.END)
-            self.recoil_x_entry.insert(0, f"{self.recoil_controller.settings.secondary_recoil_x:.3f}")
-
-    def _on_key_press(self, key):
-        if hasattr(self, 'settings_dialog') and self.settings_dialog and self.settings_dialog.winfo_exists() and self.settings_dialog.hotkey_capture_mode:
-            self.settings_dialog.process_captured_key(key)
-            return
-
-        hotkey_string = self._get_key_string(key)
-        self._process_hotkey(hotkey_string)
-
-    def _on_key_release(self, key):
-        if not self.recoil_active:
-            return
-            
-        hotkey_string = self._get_key_string(key)
-        if hotkey_string in self.recoil_controller.settings.t_bag_hotkey:
-            if self.recoil_controller.t_bag_active:
-                self.recoil_controller.stop_t_bag()
-
-    def update_main_ui_recoil_values(self):
-        if self.active_weapon == "primary":
-            self.recoil_y_slider.set(int(self.recoil_controller.settings.primary_recoil_y * 100))
-            self.recoil_y_entry.delete(0, tk.END)
-            self.recoil_y_entry.insert(0, f"{self.recoil_controller.settings.primary_recoil_y:.2f}")
-
-            self.recoil_x_slider.set(int(self.recoil_controller.settings.primary_recoil_x * 1000))
-            self.recoil_x_entry.delete(0, tk.END)
-            self.recoil_x_entry.insert(0, f"{self.recoil_controller.settings.primary_recoil_x:.3f}")
-
-            self.recoil_controller.set_recoil_y(self.recoil_controller.settings.primary_recoil_y)
-            self.recoil_controller.set_recoil_x(self.recoil_controller.settings.primary_recoil_x)
-        else:
-            self.recoil_y_slider.set(int(self.recoil_controller.settings.secondary_recoil_y * 100))
-            self.recoil_y_entry.delete(0, tk.END)
-            self.recoil_y_entry.insert(0, f"{self.recoil_controller.settings.secondary_recoil_y:.2f}")
-
-            self.recoil_x_slider.set(int(self.recoil_controller.settings.secondary_recoil_x * 1000))
-            self.recoil_x_entry.delete(0, tk.END)
-            self.recoil_x_entry.insert(0, f"{self.recoil_controller.settings.secondary_recoil_x:.3f}")
-            
-            self.recoil_controller.set_recoil_y(self.recoil_controller.settings.secondary_recoil_y)
-            self.recoil_controller.set_recoil_x(self.recoil_controller.settings.secondary_recoil_x)
-        
-        if hasattr(self, 'secondary_weapon_enabled_checkbox'):
-            self.secondary_weapon_enabled_checkbox.select() if self.recoil_controller.settings.secondary_weapon_enabled else self.secondary_weapon_enabled_checkbox.deselect()
-
-    def _get_key_string(self, key):
-        """Converts a pynput key object to a string, handling different keyboard layouts."""
-        try:
-            if hasattr(key, 'vk') and key.vk is not None:
-                if 96 <= key.vk <= 105:
-                    return f"NUMPAD_{key.vk - 96}"
-                elif 112 <= key.vk <= 123:
-                    return f"F{key.vk - 111}"
-                elif key.vk == 20:
-                    return "CAPS_LOCK"
-                elif key.vk == 162:
-                    return "CTRL_L"
-                elif key.vk == 163:
-                    return "CTRL_R"
-                elif key.vk == 160:
-                    return "SHIFT_L"
-                elif key.vk == 161:
-                    return "SHIFT_R"
-                elif key.vk == 164:
-                    return "ALT_L"
-                elif key.vk == 165:
-                    return "ALT_R"
-                elif key.vk == 8:
-                    return "BACKSPACE"
-                elif key.vk == 9:
-                    return "TAB"
-                elif key.vk == 13:
-                    return "ENTER"
-                elif key.vk == 27:
-                    return "ESC"
-                elif key.vk == 32:
-                    return "SPACE"
-                elif key.vk == 45:
-                    return "INSERT"
-                elif key.vk == 46:
-                    return "DELETE"
-                elif key.vk == 36:
-                    return "HOME"
-                elif key.vk == 35:
-                    return "END"
-                elif key.vk == 33:
-                    return "PAGE_UP"
-                elif key.vk == 34:
-                    return "PAGE_DOWN"
-                elif key.vk == 37:
-                    return "LEFT"
-                elif key.vk == 38:
-                    return "UP"
-                elif key.vk == 39:
-                    return "RIGHT"
-                elif key.vk == 40:
-                    return "DOWN"
-                
-                if hasattr(key, 'char') and key.char is not None:
-                    return str(key.char).upper()
-                else:
-                    return str(key).replace('Key.', '').upper()
-            else:
-                if hasattr(key, 'char') and key.char is not None:
-                    return str(key.char).upper()
-                else:
-                    return str(key).replace('Key.', '').upper()
-        except AttributeError:
-            return str(key).replace('Key.', '').upper()
-
-    def _get_mouse_hotkey_string(self, button):
-        """Converts a mouse button event to a hotkey string."""
-        if button == Button.x1:
-            return "MOUSE_X1"
-        elif button == Button.x2:
-            return "MOUSE_X2"
-        elif button == Button.left:
-            return "MOUSE_LEFT"
-        elif button == Button.right:
-            return "MOUSE_RIGHT"
-        elif button == Button.middle:
-            return "MOUSE_MIDDLE"
-        
-        return ""
-
-    def _on_mouse_click(self, x, y, button, pressed):
-        if hasattr(self, 'settings_dialog') and self.settings_dialog and self.settings_dialog.winfo_exists() and self.settings_dialog.hotkey_capture_mode:
-            if pressed:
-                if button is not None:
-                    hotkey_string = self._get_mouse_hotkey_string(button)
-                    self.settings_dialog.process_captured_key(hotkey_string)
-            return
-
-        if pressed:
-            if button is not None:
-                hotkey_string = self._get_mouse_hotkey_string(button)
-                self._process_hotkey(hotkey_string)
-        
-        if self.recoil_controller.t_bag_active:
-            self.recoil_controller.stop_t_bag()
-            self.recoil_controller.logger.info("T-bag stopped due to mouse click.")
-
-
-    def _on_scroll_event(self, x, y, dx, dy):
-        if hasattr(self, 'settings_dialog') and self.settings_dialog and self.settings_dialog.winfo_exists() and self.settings_dialog.hotkey_capture_mode:
-            hotkey_string = ""
-            if dy > 0:
-                hotkey_string = "SCROLL_UP"
-            elif dy < 0:
-                hotkey_string = "SCROLL_DOWN"
-            
-            if hotkey_string:
-                self.settings_dialog.process_captured_key(hotkey_string)
-            return
-
-        if dy > 0:
-            self._process_hotkey("SCROLL_UP")
-        elif dy < 0:
-            self._process_hotkey("SCROLL_DOWN")
-
-    def open_settings(self):
-        self.settings_dialog = SettingsDialog(self.recoil_controller, self)
-        self.settings_dialog.grab_set()
-        self.settings_dialog.wait_window()
-        self.recoil_controller.logger.info("Settings dialog closed. Re-registering hotkeys.")
-        self.save_settings()
-
-    def open_presets_dialog(self):
-        self.presets_dialog = PresetsDialog(self.recoil_controller, self, self.agent_icon_cache)
-        self.presets_dialog.grab_set()
-        self.presets_dialog.wait_window()
-
-    def open_chat(self):
-        chat_dialog = ChatDialog(self)
-        chat_dialog.grab_set()
-        chat_dialog.wait_window()
-
-    def _request_pin_and_authenticate(self):
-        pin_dialog = PinInputDialog(self, self._("pin_dialog_title"), self._("enter_pin_prompt"))
-        pin = pin_dialog.get_input()
-
-        if pin:
-            try:
-                response = requests.post(f"{NGROK_BASE_URL}/check-pin", json={"pin": pin})
-                response.raise_for_status()
-                result = response.json()
-
-                if result.get("success"):
-                    self.recoil_controller.settings.discord_user_id = result.get("discord_user_id")
-                    self.save_settings()
-                    CTkMessagebox(title=self._("success"), message="Autenticação bem-sucedida!", icon="info").get()
-                    return True
-                else:
-                    CTkMessagebox(title=self._("error"), message=result.get("message", "PIN inválido ou já utilizado."), icon="cancel").get()
-                    return False
-            except requests.exceptions.RequestException as e:
-                CTkMessagebox(title=self._("error"), message=f"Erro de comunicação com o servidor: {e}", icon="cancel").get()
-                return False
-        return False
-
-    def load_settings(self):
-        settings_path = os.path.join(CONFIG_DIR, "settings.cfg")
-        if os.path.exists(settings_path):
-            try:
-                with open(settings_path, 'r') as f:
-                    loaded_settings_dict = json.load(f)
-                self.recoil_controller.settings = self.recoil_controller.settings.from_dict(loaded_settings_dict)
-                
-                self.recoil_controller.settings.language = loaded_settings_dict.get("language", "en")
-                self.recoil_controller.settings.discord_user_id = loaded_settings_dict.get("discord_user_id", None)
-
-                self.recoil_controller.logger.info("Settings loaded successfully.")
-                self.recoil_controller.logger.info(f"Loaded Settings: Sensitivity={self.recoil_controller.settings.sensitivity}, Smoothing Factor={self.recoil_controller.settings.smoothing_factor}")
-            except Exception as e:
-                self.recoil_controller.logger.error(f"Error loading settings: {e}")
-        else:
-            if not hasattr(self.recoil_controller.settings, 'language'):
-                self.recoil_controller.settings.language = "en"
-            self.recoil_controller.logger.info("settings.cfg not found. Using default settings.")
-
-    def save_settings(self):
-        settings_path = os.path.join(CONFIG_DIR, "settings.cfg")
-        try:
-            settings_dict = self.recoil_controller.settings.to_dict()
-            if hasattr(self.recoil_controller.settings, 'language'):
-                settings_dict['language'] = self.recoil_controller.settings.language
-            else:
-                settings_dict['language'] = 'en'
-            
-            settings_dict['discord_user_id'] = self.recoil_controller.settings.discord_user_id
-
-            with open(settings_path, 'w') as f:
-                json.dump(settings_dict, f, indent=4)
-            self.recoil_controller.logger.info("Settings saved successfully.")
+                for fn in os.listdir(agent_path):
+                    if not fn.lower().endswith('.json'):
+                        continue
+                    name = os.path.splitext(fn)[0]
+                    all_presets.append({
+                        'agent': agent_dir,
+                        'name': name
+                    })
         except Exception as e:
-            self.recoil_controller.logger.error(f"Error saving settings: {e}")
+            print(f"Error listing local presets: {e}")
+        return all_presets
 
-    def toggle_script_running(self):
-        if self.recoil_controller.script_running:
-            self.recoil_controller.stop()
-            self.recoil_active = False
-            print("Main script DISABLED")
-        else:
-            self.recoil_controller.start()
-            self.recoil_active = True
-            print("Main script ENABLED")
-        self.update_toggle_button_color()
-
-    def toggle_recoil(self):
-        if self.recoil_active:
-            self.recoil_controller.stop()
-            self.recoil_active = False
-            self.recoil_controller.logger.info("Recoil Disabled.")
-        else:
-            self.recoil_controller.start()
-            self.recoil_active = True
-            self.recoil_controller.logger.info("Recoil Enabled.")
-        self.update_toggle_button_color()
-
-    
-
-    def process_ai_response(self, ai_response, chat_dialog):
-        chat_dialog.add_message("RecoilAI", ai_response.get("response_text", ""))
-        new_settings = ai_response.get("new_settings")
-        ui_actions = ai_response.get("ui_actions", [])
-        
-        current_rpm_used = ai_response.get("current_rpm", 0)
-        current_rpd_used = ai_response.get("current_rpd", 0)
-        
-        rpm_remaining = 5 - current_rpm_used
-        rpd_remaining = 100 - current_rpd_used
-
-        chat_dialog.rpm_label.configure(text=f"RPM {rpm_remaining}/5")
-        chat_dialog.rpd_label.configure(text=f"RPD {rpd_remaining}/100")
-
-        if new_settings:
-            for setting_key, setting_value in new_settings.items():
-                if setting_key == "t_bag_key":
-                    setattr(self.recoil_controller.settings, setting_key, str(setting_value))
-                elif isinstance(setting_value, bool):
-                    setattr(self.recoil_controller.settings, setting_key, bool(setting_value))
-                elif isinstance(setting_value, (int, float)):
-                    setattr(self.recoil_controller.settings, setting_key, float(setting_value))
-                else:
-                    setattr(self.recoil_controller.settings, setting_key, setting_value)
-            
-            self.update_main_ui_recoil_values()
-            self.save_settings()
-            if hasattr(self, 'settings_dialog') and self.settings_dialog and self.settings_dialog.winfo_exists():
-                self.settings_dialog.update_ui_text()
-                self.settings_dialog.update_settings()
-            if hasattr(self, 't_bag_enabled_checkbox'):
-                self.t_bag_enabled_checkbox.select() if self.recoil_controller.settings.t_bag_enabled else self.t_bag_enabled_checkbox.deselect()
-            if hasattr(self, 'secondary_weapon_enabled_checkbox'):
-                self.secondary_weapon_enabled_checkbox.select() if self.recoil_controller.settings.secondary_weapon_enabled else self.secondary_weapon_enabled_checkbox.deselect()
-
-        for action_data in ui_actions:
-            action_type = action_data.get("action")
-            params = action_data.get("params", {})
-            self._perform_ui_action(action_type, params)
-
-        chat_dialog.send_button.configure(state="normal")
-
-    def _perform_ui_action(self, action_type, params):
-        if action_type == "save_preset":
-            agent_name = params.get("agent_name")
-            preset_name = params.get("preset_name")
-            if agent_name and preset_name:
-                self._perform_save_preset(agent_name, preset_name)
-        elif action_type == "load_preset":
-            agent_name = params.get("agent_name")
-            preset_name = params.get("preset_name")
-            if agent_name and preset_name:
-                self._perform_load_preset(agent_name, preset_name)
-        elif action_type == "toggle_tbag_macro":
-            enabled = params.get("enabled")
-            if enabled is not None:
-                self._perform_toggle_tbag_macro(enabled)
-        elif action_type == "toggle_secondary_weapon":
-            enabled = params.get("enabled")
-            if enabled is not None:
-                self._perform_toggle_secondary_weapon(enabled)
-        elif action_type == "delete_preset":
-            agent_name = params.get("agent_name")
-            preset_name = params.get("preset_name")
-            if agent_name and preset_name:
-                self._perform_delete_preset(agent_name, preset_name)
-        elif action_type == "toggle_recoil_state":
-            enabled = params.get("enabled")
-            if enabled is not None:
-                self.toggle_recoil()
-        else:
-            logging.warning(f"Unknown UI action: {action_type}")
-
-    def _perform_save_preset(self, agent_name, preset_name):
+    def save_preset(self, agent_name, preset_name, settings_to_save):
         agent_presets_dir = os.path.join(CONFIG_DIR, "presets", agent_name.lower().replace(" ", "_"))
         os.makedirs(agent_presets_dir, exist_ok=True)
-
         preset_file_path = os.path.join(agent_presets_dir, f"{preset_name}.json")
-
-        settings_to_save = {
-            "primary_recoil_y": self.recoil_controller.settings.primary_recoil_y,
-            "primary_recoil_x": self.recoil_controller.settings.primary_recoil_x,
-            "secondary_recoil_y": self.recoil_controller.settings.secondary_recoil_y,
-            "secondary_recoil_x": self.recoil_controller.settings.secondary_recoil_x,
-            "secondary_weapon_enabled": self.recoil_controller.settings.secondary_weapon_enabled,
-        }
-
         try:
             with open(preset_file_path, 'w') as f:
                 json.dump(settings_to_save, f, indent=4)
-            CTkMessagebox(title=self._("success"), message=self._("preset_saved_successfully", preset_name=preset_name, agent_name=agent_name), icon="info").get()
-            if hasattr(self, 'presets_dialog') and self.presets_dialog and self.presets_dialog.winfo_exists():
-                self.presets_dialog.populate_presets_combobox()
+            print(f"Preset '{preset_name}' saved successfully for {agent_name}.")
+            return {"success": True, "message": f"Preset '{preset_name}' saved successfully!"}
         except Exception as e:
-            CTkMessagebox(title=self._("error"), message=self._("error_saving_preset", e=e), icon="cancel").get()
-        logging.info(f"AI requested saving preset '{preset_name}' for {agent_name}")
+            print(f"Error saving preset: {e}")
+            return {"success": False, "message": f"Error saving preset: {e}"}
 
-    def _perform_load_preset(self, agent_name, preset_name):
+    def load_preset(self, agent_name, preset_name):
         agent_presets_dir = os.path.join(CONFIG_DIR, "presets", agent_name.lower().replace(" ", "_"))
         preset_file_path = os.path.join(agent_presets_dir, f"{preset_name}.json")
-
         if not os.path.exists(preset_file_path):
-            CTkMessagebox(title=self._("error"), message=self._("preset_not_found", preset_file_path=preset_file_path), icon="cancel").get()
-            return
-
+            return {"success": False, "message": "Preset not found."}
         try:
             with open(preset_file_path, 'r') as f:
-                loaded_settings = json.load(f)
+                preset_settings = json.load(f)
             
-            self.recoil_controller.settings.primary_recoil_y = loaded_settings.get("primary_recoil_y", 0.0)
-            self.recoil_controller.settings.primary_recoil_x = loaded_settings.get("primary_recoil_x", 0.0)
-            self.recoil_controller.settings.secondary_recoil_y = loaded_settings.get("secondary_recoil_y", 0.0)
-            self.recoil_controller.settings.secondary_recoil_x = loaded_settings.get("secondary_recoil_x", 0.0)
-            self.recoil_controller.settings.secondary_weapon_enabled = loaded_settings.get("secondary_weapon_enabled", False)
+            # Get the current full settings from the UI/app state
+            current_full_settings = self.get_settings()
+            
+            # Update the current settings with the values from the preset
+            current_full_settings.update(preset_settings)
 
-            self.update_main_ui_recoil_values()
-            self.save_settings()
+            # Now apply this complete, merged settings object
+            self.apply_settings(current_full_settings)
+            
+            print(f"Preset '{preset_name}' loaded successfully for {agent_name}.")
 
-            CTkMessagebox(title=self._("success"), message=self._("preset_loaded_successfully", selected_preset=preset_name, agent_name=agent_name), icon="info").get()
-            if hasattr(self, 'presets_dialog') and self.presets_dialog and self.presets_dialog.winfo_exists():
-                self.presets_dialog.populate_presets_combobox()
+            # Trigger UI update with the final, applied settings
+            if self._window:
+                self._window.evaluate_js(f'updateUIFromPython({json.dumps(self.get_settings())})')
+
+            return {"success": True, "settings": current_full_settings}
         except Exception as e:
-            CTkMessagebox(title=self._("error"), message=self._("error_loading_preset", e=e), icon="cancel").get()
-        logging.info(f"AI requested loading preset '{preset_name}' for {agent_name}")
+            print(f"Error loading preset: {e}")
+            return {"success": False, "message": f"Error loading preset: {e}"}
 
-    def _perform_toggle_tbag_macro(self, enabled):
-        self.recoil_controller.settings.t_bag_enabled = enabled
-        self.t_bag_enabled_checkbox.select() if enabled else self.t_bag_enabled_checkbox.deselect()
-        self.save_settings()
-        logging.info(f"AI requested T-bag macro {'enabled' if enabled else 'disabled'}")
-
-    def _perform_toggle_secondary_weapon(self, enabled):
-        self.recoil_controller.settings.secondary_weapon_enabled = enabled
-        if self.active_weapon == "secondary":
-            self.secondary_weapon_enabled_checkbox.select() if enabled else self.secondary_weapon_enabled_checkbox.deselect()
-        self.save_settings()
-        logging.info(f"AI requested secondary weapon {'enabled' if enabled else 'disabled'}")
-
-    def _perform_delete_preset(self, agent_name, preset_name):
+    def delete_preset(self, agent_name, preset_name):
         agent_presets_dir = os.path.join(CONFIG_DIR, "presets", agent_name.lower().replace(" ", "_"))
         preset_file_path = os.path.join(agent_presets_dir, f"{preset_name}.json")
-
         if not os.path.exists(preset_file_path):
-            CTkMessagebox(title=self._("error"), message=self._("preset_not_found", preset_file_path=preset_file_path), icon="cancel").get()
-            return
-
+            return {"success": False, "message": "Preset not found."}
         try:
             os.remove(preset_file_path)
-            CTkMessagebox(title=self._("success"), message=self._("preset_deleted_successfully", selected_preset=preset_name), icon="info").get()
-            if hasattr(self, 'presets_dialog') and self.presets_dialog and self.presets_dialog.winfo_exists():
-                self.presets_dialog.populate_presets_combobox()
+            print(f"Preset '{preset_name}' deleted successfully for {agent_name}.")
+            return {"success": True, "message": f"Preset '{preset_name}' deleted successfully!"}
         except Exception as e:
-            CTkMessagebox(title=self._("error"), message=self._("error_deleting_preset", e=e), icon="cancel").get()
-        logging.info(f"AI requested deleting preset '{preset_name}' for {agent_name}")
+            print(f"Error deleting preset: {e}")
+            return {"success": False, "message": f"Error deleting preset: {e}"}
 
-    def on_closing(self):
-        self.recoil_controller.stop()
-        if self.keyboard_listener and self.keyboard_listener.is_alive():
-            self.keyboard_listener.stop()
-            self.keyboard_listener.join()
-        if self.pynput_mouse_listener and self.pynput_mouse_listener.is_alive():
-            self.pynput_mouse_listener.stop()
-            self.pynput_mouse_listener.join()
-        self.destroy()
+    # --- Community Presets (HTTP to bot server) ---
+    def get_community_presets(self, agent=None, query=None):
+        # Community presets should come only from the community database or remote API.
+        try:
+            # Prefer bundled community database first (if present)
+            db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database', 'community_presets.json')
+            if os.path.exists(db_path) and os.path.getsize(db_path) > 0:
+                with open(db_path, 'r', encoding='utf-8') as f:
+                    db_list = json.load(f)
+                    if isinstance(db_list, dict):
+                        db_list = db_list.get('presets', [])
+                    presets = []
+                    for p in db_list:
+                        entry = {
+                            'id': p.get('id') or f"db:{p.get('name', '')}",
+                            'agent': p.get('agent', ''),
+                            'name': p.get('name', ''),
+                            'author': p.get('author', 'anonymous'),
+                            'downloads': p.get('downloads', 0),
+                            'rating': p.get('rating', 0.0),
+                            'created_at': p.get('created_at'),
+                            'settings': p.get('settings', {})
+                        }
+                        presets.append(entry)
+                    # Apply optional filters
+                    if agent:
+                        presets = [p for p in presets if str(p.get('agent', '')).lower() == str(agent).lower()]
+                    if query:
+                        ql = query.lower()
+                        presets = [p for p in presets if ql in str(p.get('name', '')).lower() or ql in str(p.get('author', '') or '').lower()]
+                    return {"success": True, "presets": presets}
 
-    def _process_hotkey(self, hotkey_string):
-        if hotkey_string == 'F6':
-            self.toggle_recoil()
-            return
-        if hotkey_string == 'F7':
-            self.open_settings()
-            return
-        if hotkey_string == 'F8':
-            self.toggle_script_running()
-            return
+            # Fallback to remote NGROK endpoint
+            params = {}
+            if agent:
+                params['agent'] = agent
+            if query:
+                params['q'] = query
+            r = requests.get(f"{NGROK_BASE_URL}/community-presets", params=params, timeout=4)
+            r.raise_for_status()
+            data = r.json()
+            return {"success": True, "presets": data.get("presets", [])}
+        except Exception as e:
+            print(f"Error fetching community presets: {e}")
+            return {"success": False, "presets": [], "error": str(e)}
 
-        if not self.recoil_active:
-            return
+    def import_community_preset(self, preset_id):
+        try:
+            r = requests.get(f"{NGROK_BASE_URL}/community-presets/{preset_id}")
+            r.raise_for_status()
+            data = r.json()
+            settings = data.get('settings', {}) if isinstance(data, dict) else {}
+            if not isinstance(settings, dict):
+                return {"success": False, "message": "Invalid preset format."}
 
-        if hotkey_string in self.recoil_controller.settings.primary_weapon_hotkey or hotkey_string in self.recoil_controller.settings.primary_weapon_hotkey_2:
-            self.active_weapon = "primary"
-            self.recoil_controller.settings.active_weapon = "primary"
-            self.recoil_controller.active_weapon = "primary"
-            self.recoil_controller.base_recoil_y = self.recoil_controller.settings.primary_recoil_y
-            self.recoil_controller.base_recoil_x = self.recoil_controller.settings.primary_recoil_x
-            self.update_main_ui_recoil_values()
-            self.recoil_controller.logger.info(f"Primary weapon activated by hotkey: {hotkey_string}. Slider values now control primary recoil.")
+            # Map known fields
+            s = self.recoil_controller.settings
+            s.primary_recoil_y = float(settings.get("primary_recoil_y", s.primary_recoil_y)) if settings.get("primary_recoil_y") is not None else s.primary_recoil_y
+            s.primary_recoil_x = float(settings.get("primary_recoil_x", s.primary_recoil_x)) if settings.get("primary_recoil_x") is not None else s.primary_recoil_x
+            s.secondary_recoil_y = float(settings.get("secondary_recoil_y", s.secondary_recoil_y)) if settings.get("secondary_recoil_y") is not None else s.secondary_recoil_y
+            s.secondary_recoil_x = float(settings.get("secondary_recoil_x", s.secondary_recoil_x)) if settings.get("secondary_recoil_x") is not None else s.secondary_recoil_x
+            s.secondary_weapon_enabled = bool(settings.get("secondary_weapon_enabled", s.secondary_weapon_enabled))
 
-        elif hotkey_string in self.recoil_controller.settings.secondary_weapon_hotkey or             hotkey_string in self.recoil_controller.settings.secondary_weapon_hotkey_2:
-            if self.recoil_controller.settings.secondary_weapon_enabled:
-                self.active_weapon = "secondary"
-                self.recoil_controller.settings.active_weapon = "secondary"
-                self.recoil_controller.active_weapon = "secondary"
-                self.recoil_controller.base_recoil_y = self.recoil_controller.settings.secondary_recoil_y
-                self.recoil_controller.base_recoil_x = self.recoil_controller.settings.secondary_recoil_x
-                self.update_main_ui_recoil_values()
-                self.recoil_controller.logger.info(f"Secondary weapon activated by hotkey: {hotkey_string}. Slider values now control secondary recoil.")
+            # Optional generic recoil_y/x support
+            if "recoil_y" in settings and isinstance(settings["recoil_y"], (int, float)):
+                s.primary_recoil_y = float(settings["recoil_y"])
+            if "recoil_x" in settings and isinstance(settings["recoil_x"], (int, float)):
+                s.primary_recoil_x = float(settings["recoil_x"])
+
+            # Save and return
+            self.save_settings()
+            return {"success": True, "settings": s.to_dict()}
+        except Exception as e:
+            print(f"Error importing community preset: {e}")
+            return {"success": False, "message": str(e)}
+
+    def post_community_preset(self, payload):
+        try:
+            r = requests.post(f"{NGROK_BASE_URL}/community-presets", json=payload)
+            r.raise_for_status()
+            return {"success": True, "data": r.json()}
+        except Exception as e:
+            print(f"Error posting community preset: {e}")
+            return {"success": False, "message": str(e)}
+
+    # --- AI and Discord Integration API Methods ---
+    def send_ai_message(self, prompt, chat_history, discord_user_id, model):
+        payload = {
+            "prompt": prompt,
+            "current_settings": self.recoil_controller.settings.to_dict(),
+            "chat_history": chat_history,
+            "discord_user_id": discord_user_id,
+            "model": model,
+            "stream": True
+        }
+    
+        def stream_worker():
+            try:
+                response = requests.post(f"{NGROK_BASE_URL}/ai", json=payload, stream=True)
+                response.raise_for_status()
+                # Use iter_content to get raw chunks
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        # Base64 encode the raw chunk and send to JS
+                        encoded_chunk = base64.b64encode(chunk).decode('utf-8')
+                        if self._window:
+                            self._window.evaluate_js(f'window.handleAiStream("{encoded_chunk}");')
+            except Exception as e:
+                error_message = str(e).replace('"', '"').replace("'", "'")
+                if self._window:
+                    self._window.evaluate_js(f'window.handleAiStreamError("{error_message}");')
+
+        threading.Thread(target=stream_worker).start()
+        return {"success": True, "streaming": True}
+
+    def handle_ui_action(self, action):
+        if not isinstance(action, dict) or 'action' not in action:
+            return {"success": False, "message": "Invalid action format"}
+
+        action_type = action.get('action')
+        payload = action.get('payload')
+
+        if action_type == 'enable_overlay':
+            if not self.is_overlay_active():
+                self.toggle_overlay()
+            return {"success": True}
+
+        elif action_type == 'disable_overlay':
+            if self.is_overlay_active():
+                self.toggle_overlay()
+            return {"success": True}
+
+        elif action_type == 'set_overlay_agent':
+            if not payload or 'square' not in payload or 'agent_name' not in payload:
+                return {"success": False, "message": "Missing payload for set_overlay_agent"}
+            
+            square = payload.get('square')
+            agent_name = payload.get('agent_name')
+
+            if not isinstance(square, int) or not (1 <= square <= 14):
+                return {"success": False, "message": "Square must be an integer between 1 and 14"}
+
+            # Find the agent's image path
+            agent_image = ""
+            # This is inefficient, but it's the easiest way to reuse the existing logic
+            all_agents = self.get_agent_list('attackers') + self.get_agent_list('defenders')
+            for agent in all_agents:
+                if agent['name'].lower() == agent_name.lower():
+                    agent_image = agent['image']
+                    break
+            
+            if not agent_image:
+                return {"success": False, "message": f"Agent '{agent_name}' not found"}
+
+            self.overlay_squares[square - 1] = {"name": agent_name, "image": agent_image}
+            self.update_overlay_agents(self.overlay_squares)
+            return {"success": True}
+
+        elif action_type == 'remove_overlay_agent':
+            if not payload or 'square' not in payload:
+                return {"success": False, "message": "Missing payload for remove_overlay_agent"}
+            
+            square = payload.get('square')
+
+            if not isinstance(square, int) or not (1 <= square <= 14):
+                return {"success": False, "message": "Square must be an integer between 1 and 14"}
+
+            self.overlay_squares[square - 1] = None
+            self.update_overlay_agents(self.overlay_squares)
+            return {"success": True}
+
+        return {"success": False, "message": f"Unknown action: {action_type}"}
+
+    def check_pin_auth(self, pin):
+        print(f"check_pin_auth called with PIN: {pin}")
+        try:
+            response = requests.post(f"{NGROK_BASE_URL}/check-pin", json={"pin": pin})
+            response.raise_for_status()
+            result = response.json()
+            if result.get("success"):
+                # Atualiza as configurações com o ID do usuário e o token da app.
+                # O 'identificador' já existe no cliente e não é mais enviado pelo servidor.
+                self.recoil_controller.settings.discord_user_id = result.get("discord_user_id")
+                self.recoil_controller.settings.discord_username = result.get("discord_username")
+                self.recoil_controller.settings.app_id = result.get("app_id")
+                
+                # Salva as configurações atualizadas
+                self.save_settings()
+
+                # Sinaliza que está online após a autenticação bem-sucedida
+                self.signal_online()
+                
+                # Retorna sucesso com os dados do usuário
+                return {"success": True, "data": result}
             else:
-                self.recoil_controller.logger.warning(f"Secondary weapon disabled in settings. Hotkey {hotkey_string} ignored.")
+                return {"success": False, "message": result.get("message", "Falha na autenticação")}
+        except requests.exceptions.RequestException as e:
+            print(f"Error checking PIN: {e}")
+            return {"success": False, "message": f"Error communicating with auth server: {e}"}
+        except Exception as e:
+            print(f"Unexpected error checking PIN: {e}")
+            return {"success": False, "message": f"Unexpected error: {e}"}
 
-        elif hotkey_string in self.recoil_controller.settings.t_bag_hotkey:
-            if self.recoil_controller.settings.t_bag_enabled:
-                if not self.recoil_controller.t_bag_active:
-                    self.recoil_controller.start_t_bag()
+    def logout(self):
+        """Clears Discord authentication details from settings."""
+        try:
+            # Fields to clear on logout
+            fields_to_clear = ['discord_user_id', 'app_id', 'discord_username']
+            for field in fields_to_clear:
+                if hasattr(self.recoil_controller.settings, field):
+                    setattr(self.recoil_controller.settings, field, None)
+            
+            self.save_settings()
+            print("User logged out, settings cleared.")
+            return {"success": True}
+        except Exception as e:
+            print(f"Error during logout: {e}")
+            return {"success": False, "error": str(e)}
 
-    def _(self, key, **kwargs):
-        """Gets a translation from the current language dictionary."""
-        lang_dict = TRANSLATIONS.get(self.recoil_controller.settings.language, TRANSLATIONS["en"])
-        return lang_dict.get(key, key).format(**kwargs)
+    def signal_online(self):
+        """Sends a signal to the backend that this client is online."""
+        user_id = getattr(self.recoil_controller.settings, 'identificador', None)
+        if user_id:
+            def do_request():
+                try:
+                    payload = {"identificador": user_id}
+                    requests.post(f"{NGROK_BASE_URL}/online", json=payload, timeout=5)
+                    print("Successfully signaled online status.")
+                except requests.exceptions.RequestException as e:
+                    print(f"Could not signal online status: {e}")
+            threading.Thread(target=do_request, daemon=True).start()
 
-    def update_ui_language(self):
-        """Updates all UI text elements to the currently selected language."""
-        self.title(self._("app_title"))
-        self.configure(fg_color=COLOR_BACKGROUND)
+    def signal_offline(self):
+        """Sends a signal to the backend that this client is going offline."""
+        user_id = getattr(self.recoil_controller.settings, 'identificador', None)
+        if user_id:
+            try:
+                payload = {"identificador": user_id}
+                requests.delete(f"{NGROK_BASE_URL}/online", json=payload, timeout=2)
+                print("Successfully signaled offline status.")
+            except requests.exceptions.RequestException as e:
+                print(f"Could not signal offline status on exit: {e}")
 
-        self.weapon_switcher.configure(values=[self._("primary"), self._("secondary")])
-        self.weapon_switcher.set(self._(self.active_weapon))
-        self.recoil_y_label.configure(text=self._("vertical_recoil"))
-        self.recoil_x_label.configure(text=self._("horizontal_recoil"))
-        self.secondary_weapon_enabled_checkbox.configure(text=self._("enable_secondary_weapon"))
-        self.t_bag_enabled_checkbox.configure(text=self._("enable_tbag_macro"))
-        self.settings_button.configure(text=self._("settings"))
-        self.presets_button.configure(text=self._("presets"))
-        self.chat_button.configure(text=self._("ask_ai_button"))
-        
-        self.update_toggle_button_color()
+    def start_online_count_poller(self):
+        """Starts a background thread to periodically fetch the online user count."""
+        if self.online_count_poller and self.online_count_poller.is_alive():
+            return
+
+        def poll():
+            import time
+            time.sleep(5) # Initial delay
+            while True:
+                try:
+                    response = requests.get(f"{NGROK_BASE_URL}/online", timeout=5)
+                    response.raise_for_status()
+                    data = response.json()
+                    if data.get("success"):
+                        count = data.get("online_count", 0)
+                        if self._window:
+                            self._window.evaluate_js(f'updateOnlineCount({count})')
+                except requests.exceptions.RequestException:
+                    pass # Fail silently on network errors
+                except Exception as e:
+                    print(f"Unexpected error in online count poller: {e}")
+                
+                time.sleep(45) # Poll every 30 seconds
+
+        self.online_count_poller = threading.Thread(target=poll, daemon=True)
+        self.online_count_poller.start()
+        print("Started online count poller.")
+
+    def add_to_memory(self, discord_user_id, content):
+        payload = {"discord_user_id": discord_user_id, "content": content}
+        try:
+            response = requests.post(f"{NGROK_BASE_URL}/add_to_memory", json=payload)
+            response.raise_for_status()
+            return {"success": True, "data": response.json()}
+        except requests.exceptions.RequestException as e:
+            print(f"Error adding to memory: {e}")
+            return {"success": False, "message": f"Error communicating with memory server: {e}"}
+
+    def send_report(self, chat_history, discord_user_id):
+        payload = {"chat_history": chat_history, "discord_user_id": discord_user_id}
+        try:
+            response = requests.post(f"{NGROK_BASE_URL}/report", json=payload)
+            response.raise_for_status()
+            return {"success": True, "data": response.json()}
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending report: {e}")
+            return {"success": False, "message": f"Error communicating with report server: {e}"}
+
+    def end_session_signal(self, discord_user_id):
+        payload = {"discord_user_id": discord_user_id}
+        try:
+            response = requests.post(f"{NGROK_BASE_URL}/end_session", json=payload)
+            response.raise_for_status()
+            return {"success": True, "data": response.json()}
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending end session signal: {e}")
+            return {"success": False, "message": f"Error communicating with session server: {e}"}
+
+    def send_rating(self, rating):
+        """Sends the user's rating to the backend."""
+        try:
+            payload = {"rating": rating}
+            response = requests.post(f"{NGROK_BASE_URL}/rating", json=payload, timeout=5)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending rating: {e}")
+            return {"success": False, "message": str(e)}
+
+    def check_for_updates(self):
+        update_url = "https://raw.githubusercontent.com/K1ngPT-X/R6-Recoil-Control/refs/heads/main/Version.txt"
+        try:
+            response = requests.get(update_url)
+            response.raise_for_status()
+            latest_version = response.text.strip()
+            
+            if latest_version > __version__:
+                return {"update_available": True, "latest_version": latest_version, "current_version": __version__}
+            else:
+                return {"update_available": False, "latest_version": latest_version, "current_version": __version__}
+        except requests.exceptions.RequestException as e:
+            print(f"Error checking for updates: {e}")
+            return {"update_available": False, "error": str(e)}
+        except Exception as e:
+            print(f"An unexpected error occurred while checking for updates: {e}")
+            return {"update_available": False, "error": str(e)}
+
+# --- Windows Title Bar Dark Mode ---
+def enable_dark_title_bar(window_title: str) -> bool:
+    """Enable dark title bar on Windows 10/11 for a given window title.
+
+    Returns True if applied, False otherwise.
+    """
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, window_title)
+        if not hwnd:
+            return False
+
+        # DWM attribute for dark mode: 20 on 1903+, 19 on 1809
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_1903 = 19
+
+        value = ctypes.c_int(1)
+        dwmapi = ctypes.windll.dwmapi
+
+        # Try attr 20 first, then 19
+        result = dwmapi.DwmSetWindowAttribute(hwnd,
+                                              ctypes.c_uint(DWMWA_USE_IMMERSIVE_DARK_MODE),
+                                              ctypes.byref(value),
+                                              ctypes.sizeof(value))
+        if result != 0:
+            result = dwmapi.DwmSetWindowAttribute(hwnd,
+                                                  ctypes.c_uint(DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_1903),
+                                                  ctypes.byref(value),
+                                                  ctypes.sizeof(value))
+        return result == 0
+    except Exception:
+        return False
+
+def set_titlebar_appearance(
+    window_title: str,
+    dark_mode: bool = True,
+    caption_color_rgb: tuple = (26, 26, 26),
+    text_color_rgb: tuple = (234, 234, 234),
+    border_color_rgb: tuple = (58, 58, 58),
+    backdrop: str = "mica",  # options: 'none', 'mica', 'tabbed', 'auto'
+    corner: str = "round"     # options: 'default', 'notround', 'round', 'small'
+) -> bool:
+    """Customize native Windows title bar colors/backdrop (Windows 11 22H2+).
+
+    Returns True if any attribute applied successfully.
+    """
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, window_title)
+        if not hwnd:
+            return False
+
+        dwmapi = ctypes.windll.dwmapi
+        applied_any = False
+
+        # Helper to convert (R,G,B) to COLORREF (0x00BBGGRR)
+        def to_colorref(rgb: tuple) -> ctypes.c_int:
+            r, g, b = rgb
+            return ctypes.c_int((b << 16) | (g << 8) | r)
+
+        # Dark mode (keep for downlevel support)
+        if dark_mode:
+            enable_dark_title_bar(window_title)
+
+        # Title bar colors (Win11 22H2+)
+        DWMWA_BORDER_COLOR = 34
+        DWMWA_CAPTION_COLOR = 35
+        DWMWA_TEXT_COLOR = 36
+        try:
+            border = to_colorref(border_color_rgb)
+            caption = to_colorref(caption_color_rgb)
+            text = to_colorref(text_color_rgb)
+
+            if dwmapi.DwmSetWindowAttribute(hwnd, ctypes.c_uint(DWMWA_BORDER_COLOR), ctypes.byref(border), ctypes.sizeof(border)) == 0:
+                applied_any = True
+            if dwmapi.DwmSetWindowAttribute(hwnd, ctypes.c_uint(DWMWA_CAPTION_COLOR), ctypes.byref(caption), ctypes.sizeof(caption)) == 0:
+                applied_any = True
+            if dwmapi.DwmSetWindowAttribute(hwnd, ctypes.c_uint(DWMWA_TEXT_COLOR), ctypes.byref(text), ctypes.sizeof(text)) == 0:
+                applied_any = True
+        except Exception:
+            pass
+
+        # Corner preference
+        DWMWA_WINDOW_CORNER_PREFERENCE = 33
+        corner_map = {
+            "default": 0,
+            "notround": 1,
+            "round": 2,
+            "small": 3,
+        }
+        try:
+            corner_val = ctypes.c_int(corner_map.get(corner, 2))
+            if dwmapi.DwmSetWindowAttribute(hwnd, ctypes.c_uint(DWMWA_WINDOW_CORNER_PREFERENCE), ctypes.byref(corner_val), ctypes.sizeof(corner_val)) == 0:
+                applied_any = True
+        except Exception:
+            pass
+
+        # Backdrop (Mica/Tabbed)
+        DWMWA_SYSTEMBACKDROP_TYPE = 38
+        backdrop_map = {
+            "auto": 0,    # DWMSBT_AUTO
+            "none": 1,    # DWMSBT_NONE
+            "mica": 2,    # DWMSBT_MAINWINDOW (Mica)
+            "tabbed": 4,  # DWMSBT_TABBEDWINDOW (Mica Alt)
+        }
+        try:
+            backdrop_val = ctypes.c_int(backdrop_map.get(backdrop, 2))
+            if dwmapi.DwmSetWindowAttribute(hwnd, ctypes.c_uint(DWMWA_SYSTEMBACKDROP_TYPE), ctypes.byref(backdrop_val), ctypes.sizeof(backdrop_val)) == 0:
+                applied_any = True
+        except Exception:
+            pass
+
+        return applied_any
+    except Exception:
+        return False
+
+
+
+def remove_titlebar_icon(window_title: str) -> bool:
+    """Remove the small and big icons from the native title bar on Windows."""
+    GWL_EXSTYLE = -20
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, window_title)
+        if not hwnd:
+            return False
+
+        WM_SETICON = 0x0080
+        ICON_SMALL = 0
+        ICON_BIG = 1
+        ICON_SMALL2 = 2
+
+        # Clear window icons
+        user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, 0)
+        user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, 0)
+        user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL2, 0)
+
+        # Also clear class icons for reliability
+        GCLP_HICON = -14
+        GCLP_HICONSM = -34
+        try:
+            ctypes.windll.user32.SetClassLongPtrW(hwnd, GCLP_HICON, 0)
+            ctypes.windll.user32.SetClassLongPtrW(hwnd, GCLP_HICONSM, 0)
+        except Exception:
+            try:
+                ctypes.windll.user32.SetClassLongW(hwnd, GCLP_HICON, 0)
+                ctypes.windll.user32.SetClassLongW(hwnd, GCLP_HICONSM, 0)
+            except Exception:
+                pass
+
+        # Remove icon gap by adding WS_EX_DLGMODALFRAME and forcing non-client refresh
+        WS_EX_DLGMODALFRAME = 0x0001
+        SWP_NOSIZE = 0x0001
+        SWP_NOMOVE = 0x0002
+        SWP_NOZORDER = 0x0004
+        SWP_FRAMECHANGED = 0x0020
+        try:
+            # Prefer 64-bit aware API
+            GetWindowLongPtrW = ctypes.windll.user32.GetWindowLongPtrW
+            SetWindowLongPtrW = ctypes.windll.user32.SetWindowLongPtrW
+            GetWindowLongPtrW.restype = ctypes.c_longlong
+            ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+            ex_style |= WS_EX_DLGMODALFRAME
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style)
+        except Exception:
+            try:
+                GetWindowLongW = ctypes.windll.user32.GetWindowLongW
+                SetWindowLongW = ctypes.windll.user32.SetWindowLongW
+                ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE)
+                ex_style |= WS_EX_DLGMODALFRAME
+                SetWindowLongW(hwnd, GWL_EXSTYLE, ex_style)
+            except Exception:
+                pass
+
+        # Apply style change
+        ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+                                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
+        return True
+    except Exception:
+        return False
+
+def set_transparent_titlebar_icon(window_title: str) -> bool:
+    """Assign a fully transparent 1x1 icon to avoid the generic placeholder."""
+    try:
+        user32 = ctypes.windll.user32
+        gdi32 = ctypes.windll.gdi32
+        hwnd = user32.FindWindowW(None, window_title)
+        if not hwnd:
+            return False
+
+        # Create 1x1 monochrome mask bitmap filled with 1s (transparent)
+        cx = cy = 1
+        planes = 1
+        bpp = 1
+        # one byte with all bits set -> transparent
+        bits = (ctypes.c_ubyte * 1)(0xFF)
+        hbmMask = gdi32.CreateBitmap(cx, cy, planes, bpp, ctypes.byref(bits))
+        if not hbmMask:
+            return False
+
+        class ICONINFO(ctypes.Structure):
+            _fields_ = [
+                ("fIcon", ctypes.c_bool),
+                ("xHotspot", ctypes.c_ulong),
+                ("yHotspot", ctypes.c_ulong),
+                ("hbmMask", ctypes.c_void_p),
+                ("hbmColor", ctypes.c_void_p),
+            ]
+
+        iconinfo = ICONINFO()
+        iconinfo.fIcon = True
+        iconinfo.xHotspot = 0
+        iconinfo.yHotspot = 0
+        iconinfo.hbmMask = hbmMask
+        iconinfo.hbmColor = 0
+
+        hIcon = ctypes.windll.user32.CreateIconIndirect(ctypes.byref(iconinfo))
+        # release mask bitmap
+        gdi32.DeleteObject(hbmMask)
+
+        if not hIcon:
+            return False
+
+        WM_SETICON = 0x0080
+        ICON_SMALL = 0
+        ICON_BIG = 1
+        ICON_SMALL2 = 2
+
+        user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hIcon)
+        user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hIcon)
+        user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL2, hIcon)
+        return True
+    except Exception:
+        return False
+
+def ensure_blank_icon_file() -> Optional[str]:
+    """Create a transparent .ico file and return its path. Returns None on failure."""
+    try:
+        icons_dir = os.path.join(CONFIG_DIR, "_runtime")
+        os.makedirs(icons_dir, exist_ok=True)
+        icon_path = os.path.join(icons_dir, "blank.ico")
+        if os.path.exists(icon_path):
+            return icon_path
+        if Image is None:
+            return None
+        img = Image.new('RGBA', (32, 32), (0, 0, 0, 0))
+        img.save(icon_path, format='ICO')
+        return icon_path
+    except Exception:
+        return None
+
+def set_titlebar_icon_from_file(window_title: str, ico_path: str) -> bool:
+    """Load an .ico file from disk and assign it to the window (small/big)."""
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, window_title)
+        if not hwnd:
+            return False
+
+        # Load icon from file
+        LR_DEFAULTSIZE = 0x0040
+        LR_LOADFROMFILE = 0x0010
+        hIcon = ctypes.windll.user32.LoadImageW(0, ico_path, 1, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE)
+        if not hIcon:
+            return False
+
+        WM_SETICON = 0x0080
+        ICON_SMALL = 0
+        ICON_BIG = 1
+        ICON_SMALL2 = 2
+
+        user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hIcon)
+        user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hIcon)
+        user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL2, hIcon)
+        return True
+    except Exception:
+        return False
+
+def strip_system_menu_and_caption(window_title: str) -> bool:
+    """Remove system menu and caption, eliminating icon area entirely (frameless title)."""
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, window_title)
+        if not hwnd:
+            return False
+        GWL_STYLE = -16
+        WS_SYSMENU = 0x00080000
+        WS_CAPTION = 0x00C00000
+        SWP_NOSIZE = 0x0001
+        SWP_NOMOVE = 0x0002
+        SWP_NOZORDER = 0x0004
+        SWP_FRAMECHANGED = 0x0020
+        try:
+            GetWindowLongPtrW = ctypes.windll.user32.GetWindowLongPtrW
+            SetWindowLongPtrW = ctypes.windll.user32.SetWindowLongPtrW
+            GetWindowLongPtrW.restype = ctypes.c_longlong
+            style = GetWindowLongPtrW(hwnd, GWL_STYLE)
+            style &= ~(WS_SYSMENU | WS_CAPTION)
+            SetWindowLongPtrW(hwnd, GWL_STYLE, style)
+        except Exception:
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)
+            style &= ~(WS_SYSMENU | WS_CAPTION)
+            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+        ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+                                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
+        return True
+    except Exception:
+        return False
+
+
+# --- Simple Web Server ---
+def start_server(directory, port):
+    """Starts an HTTP server to serve the UI files."""
+    # Ensure the server serves from the project root to access 'Agents' folder
+    original_cwd = os.getcwd()
+    os.chdir(os.path.join(get_base_path(), 'webview_ui'))
+    
+    handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", port), handler) as httpd:
+        print(f"Local server started at http://localhost:{port}")
+        print(f"Serving files from: {get_base_path()}")
+        httpd.serve_forever()
+    os.chdir(original_cwd) # Restore original working directory
+
+# --- Main Application Function ---
+def main():
+    """Creates and manages the application window."""
+    print("Creating API instance")
+    api = Api()
+    print("API instance created")
+    print("API methods:", [method for method in dir(api) if not method.startswith('_')])
+    print("check_pin_auth in API:", hasattr(api, 'check_pin_auth'))
+    port = 8077  # A different port to avoid conflicts
+
+    # Start the server in a separate thread
+    server_thread = threading.Thread(target=start_server, args=('webview_ui', port))
+    server_thread.daemon = True
+    server_thread.start()
+
+    # Create the webview window
+    print("Creating webview window with API")
+    print("API object:", api)
+    print("API methods before window creation:", [method for method in dir(api) if not method.startswith('_')])
+    window = webview.create_window(
+        'Recoil Control v3 - Beta',
+        f'http://localhost:{port}/index.html', # Serve index.html from webview_ui subfolder
+        js_api=api,
+        width=910,
+        height=512,
+        resizable=True
+    )
+    print("Webview window created")
+    api.set_window(window) # Pass window object to API for JS communication
+
+    def on_closed():
+        api.signal_offline()
+        api.stop_listeners()
+
+    # Start pynput listeners after the window is created
+    window.events.closed += on_closed
+    window.events.loaded += api.start_listeners
+
+    # On first load, push settings to the UI explicitly from Python (source of truth)
+    def _push_settings_to_ui():
+        try:
+            payload = json.dumps(api.get_settings())
+            js = f"""
+            window.__initialSettings = {payload};
+            if (typeof window.updateUIFromPython === 'function') {{
+                try {{ window.updateUIFromPython(window.__initialSettings); }} catch (e) {{ console.error(e); }}
+                delete window.__initialSettings;
+            }} else {{
+                window.addEventListener('pywebviewready', function() {{
+                    try {{
+                        if (window.__initialSettings && typeof window.updateUIFromPython === 'function') {{
+                            window.updateUIFromPython(window.__initialSettings);
+                            delete window.__initialSettings;
+                        }}
+                    }} catch (e) {{ console.error(e); }}
+                }});
+            }}
+            """
+            window.evaluate_js(js)
+        except Exception as e:
+            print(f"Failed to push settings to UI: {e}")
+    window.events.loaded += _push_settings_to_ui
+    
+    # Apply dark title bar once the window is shown/loaded
+    def _apply_titlebar_style():
+        # Keep native caption, customize appearance and hide only the icon frame
+        applied = set_titlebar_appearance('Recoil Control v3 - Beta', True, (15, 15, 16), (234, 234, 234), (58, 58, 58), 'mica', 'round')
+        if not applied:
+            print('Titlebar customization not applied (OS/version may not support).')
+        # Set custom icon from webview_ui/icon.ico and re-apply shortly after to ensure it sticks
+        def _apply_icon():
+            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'webview_ui', 'icon.ico')
+            if not os.path.exists(icon_path):
+                print(f"Icon not found at {icon_path}")
+                return
+            if not set_titlebar_icon_from_file('Recoil Control v3 - Beta', icon_path):
+                print('Failed to set titlebar icon from file.')
+
+        _apply_icon()
+        try:
+            threading.Timer(0.3, _apply_icon).start()
+        except Exception:
+            pass
+    window.events.loaded += _apply_titlebar_style
+
+    # Check for updates on startup if enabled
+    if api.recoil_controller.settings.show_about_on_startup:
+        def _check_for_updates_on_load():
+            try:
+                update_info = api.check_for_updates()
+                if update_info.get("update_available"):
+                    updater_path = os.path.join(get_base_path(), "update.exe")
+                    if os.path.exists(updater_path):
+                        current_exe = sys.executable
+                        subprocess.Popen([updater_path, current_exe])
+                        window.destroy()
+                        sys.exit()
+                    else:
+                        print("update.exe not found. Providing download link.")
+                        if api._window:
+                            latest_version = update_info["latest_version"]
+                            download_link = f"https://github.com/K1ngPT-X/R6-Recoil-Control/releases/download/v{latest_version}/R6-Recoil-Control.exe"
+                            message = f"Update available, but update.exe is missing. Please download it from: {download_link}"
+                            js_message = message.replace('"', '\"').replace("'", "\'" )
+                            api._window.evaluate_js(f'showMessage("{js_message}", "info");')
+
+                elif update_info.get("error"):
+                    if api._window:
+                        error_message = str(update_info.get("error")).replace('"', '"').replace("'", "'\'")
+                        api._window.evaluate_js(f'showMessage("Error checking for updates: {error_message}", "error");')
+            except Exception as e:
+                print(f"An error occurred during the update check: {e}")
+
+        window.events.loaded += _check_for_updates_on_load
+
+    # Start the GUI event loop with Edge (Chromium) backend for frameless + drag support
+    try:
+        webview.start(gui='edgechromium', debug=False)
+    except Exception as e:
+        print(f"Could not start the application. Please ensure the WebView2 runtime is installed. Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == '__main__':
-    customtkinter.set_appearance_mode("Dark")
-    customtkinter.set_default_color_theme("blue")
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
-
-    run_update_check_and_exit_if_needed()
-    
-    app = RecoilControllerApp()
-    
-    app.protocol("WM_DELETE_WINDOW", app.on_closing)
-    app.mainloop()
+    main()
