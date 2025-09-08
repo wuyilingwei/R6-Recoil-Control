@@ -1,4 +1,12 @@
-# Recoil Control User Guide | [PT VERSION HERE](https://github.com/DragaoTI/R6-Recoil-Control/blob/main/README.md)
+# Recoil Control User Guide |  ![Downloads](https://img.shields.io/github/downloads/K1ngPT-X/R6-Recoil-Control/total?color=brightgreen&label=Downloads&style=for-the-badge)
+
+### Discord Server
+
+https://discord.gg/T4BzwjHvTx
+
+![MembersDiscord](https://dcbadge.limes.pink/api/server/https://discord.gg/T4BzwjHvTx)
+
+
 
 This guide explains how to use the Recoil Control application to manage weapon recoil settings and agent presets.
 
