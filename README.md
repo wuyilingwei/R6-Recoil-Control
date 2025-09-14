@@ -4,7 +4,7 @@
 
 https://discord.gg/T4BzwjHvTx
 
-![MembersDiscord](https://dcbadge.limes.pink/api/server/https://discord.gg/T4BzwjHvTx)
+![MemberDiscord](https://dcbadge.limes.pink/api/server/https://discord.gg/T4BzwjHvTx)
 
 
 
