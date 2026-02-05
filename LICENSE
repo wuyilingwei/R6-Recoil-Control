@@ -1,9 +1,26 @@
+SPDX-License-Identifier: CC-BY-NC-4.0
+
 Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)
 
 You are free to:
-- Share: Copy and redistribute the material in any medium or format.
-- Adapt: Remix, transform, and build upon the material.
+- Share: copy and redistribute the material in any medium or format.
+- Adapt: remix, transform, and build upon the material.
 
 Under the following terms:
-- Attribution: You must give appropriate credit (name, GitHub link, or Discord server) and provide a link to the license.
+- Attribution: You must give appropriate credit, provide a link to the license, and indicate if changes were made. Recommended minimum attribution format:
+  "Code by K1ngPT-X — https://github.com/K1ngPT-X/R6-Recoil-Control — Licensed under CC-BY-NC-4.0"
 - NonCommercial: You may not use the material for commercial purposes (selling is not permitted).
+
+Additional guidance on visible attribution:
+- When distributing this code (including binaries, builds, forks, mods, or derivative works), you must present clear and visible attribution to the end user. Examples of acceptable places to show attribution:
+  - An "About" screen/page in a UI
+  - A footer visible in the product interface
+  - A README or NOTICE file distributed with the product
+  - File headers in redistributed source files
+- The attribution should be easily discoverable by end users without requiring extra steps.
+
+Full license text:
+https://creativecommons.org/licenses/by-nc/4.0/legalcode
+More info: https://creativecommons.org/licenses/by-nc/4.0/
+
+Copyright (c) 2026 K1ngPT-X
